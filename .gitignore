@@ -1,3 +1,14 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Claude Code
+.claude/
+
 # macOS
 .DS_Store
 .AppleDouble
@@ -40,3 +51,12 @@ $RECYCLE.BIN/
 *.tmp
 *.temp
 *.log
+temp_*.jpg
+
+# Project specific
+test_images/*
+!test_images/.gitkeep
+results/*
+!results/.gitkeep
+logs/*
+!logs/.gitkeep
