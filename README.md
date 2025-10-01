@@ -208,11 +208,8 @@ vive-hyundai-mobis/
 │   └── preprocess_ir.py    # 이미지 전처리
 ├── models/                 # Ollama Modelfile
 │   └── ir-face-analyzer.modelfile
-├── test_images/            # 테스트 이미지 (42개)
+├── test_images/            # 테스트 이미지
 ├── results/                # 분석 결과 저장
-├── scripts/                # 설치 스크립트
-│   ├── setup.bat          # Windows 설치
-│   └── setup.sh           # Linux/macOS 설치
 ├── docs/                   # 상세 문서
 ├── requirements.txt        # Python 의존성
 └── README.md              # 이 파일
