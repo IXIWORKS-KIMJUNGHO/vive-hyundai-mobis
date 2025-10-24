@@ -1,0 +1,113 @@
+# TCP Server Configuration
+
+# 통합 분석 설정
+unified_analysis:
+  enable_mediapipe: true   # MediaPipe 얼굴 분석 활성화
+  enable_hairstyle: true   # 헤어스타일 분석 활성화
+
+server:
+  host: "0.0.0.0"         # 모든 인터페이스에서 수신 (권장)
+  port: 10000             # TCP 포트 번호
+  max_connections: 5      # 최대 동시 연결 수
+  mode: 1                 # 0=Debug (start 명령으로 샘플 이미지), 1=Production (Raw 이미지 데이터 수신)
+
+# 개발/프로덕션 환경별 설정
+environments:
+  development:
+    host: "127.0.0.1"     # 로컬 테스트용
+    port: 5001
+
+  production:
+    host: "0.0.0.0"       # 외부 연결 허용
+    port: 5001
+
+  # 특정 IP만 허용 (보안 강화)ㄴㄴㄴㄴㄴㄴㄴㄴㄴㄴ
+  restricted:
+    host: "172.30.1.45"   # 특정 네트워크 인터페이스만
+    port: 5001
+
+# 로깅 설정
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+
+  console:
+    enabled: true
+    level: "INFO"
+
+  file:
+    enabled: true
+    directory: "logs"
+    filename: "tcp_server.log"
+    level: "DEBUG"
+    max_bytes: 10485760  # 10MB
+    backup_count: 5
+
+# 성능 튜닝
+performance:
+  image_quality: 95       # JPEG 압축 품질 (0-100)
+  max_image_size: 5242880 # 최대 이미지 크기 (5MB)
+  timeout: 30             # 연결 타임아웃 (초)
+
+# MediaPipe 설정
+mediapipe:
+  detection:
+    static_image_mode: false
+    max_num_faces: 1
+    min_detection_confidence: 0.5
+    min_tracking_confidence: 0.5
+
+# 모델 경로
+models:
+  dlib_predictor: "data/shape_predictor_68_face_landmarks.dat"
+  bisenet_weights: "data/79999_iter.pth"
+
+# BiSeNet 설정
+bisenet:
+  input_size: 512
+  n_classes: 19
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+
+# 전처리 설정
+preprocessing:
+  clahe:
+    clip_limit: 2.5
+    tile_grid_size: [8, 8]
+  sharpen_alpha: 0.7
+
+# Morphological Operations
+morphology:
+  hair_mask:
+    close_kernel_size: 5
+    close_iterations: 2
+    open_kernel_size: 5
+    open_iterations: 1
+  forehead_mask:
+    open_kernel_size: 3
+    open_iterations: 1
+
+# Bangs Detection Thresholds
+bangs_detection:
+  hair_coverage_threshold: 0.88
+  forehead_height_ratio: 0.35
+
+# CLIP Classifier Thresholds
+clip:
+  glasses_confidence_threshold: 0.60
+  beard_confidence_threshold: 0.20
+
+# Geometric Analysis Thresholds
+geometric:
+  min_forehead_coverage: 0.05
+  style_classification:
+    allback_coverage_min: 0.45
+    allback_symmetry_max: 0.35
+    centerpart_coverage_min: 0.20
+    centerpart_coverage_max: 0.50
+    centerpart_symmetry_max: 0.35
+    sidepart_coverage_min: 0.20
+    sidepart_coverage_max: 0.50
+    sidepart_symmetry_min: 0.35
+  long_hair_bottom_threshold: 0.92

@@ -1,0 +1,74 @@
+facial_landmark_detection/
+│
+├── 📄 README.md                          # 프로젝트 개요 및 사용 가이드
+├── 📄 COMPLETION_SUMMARY.md              # 구현 완료 요약 문서
+├── 📄 requirements.txt                   # Python 의존성 패키지
+├── 📄 .gitignore                         # Git 제외 파일 목록
+│
+├── 📁 src/                               # 소스 코드 (17 files)
+│   ├── __init__.py
+│   ├── models.py                         # 핵심 데이터 모델 (4 dataclasses)
+│   │
+│   ├── 📁 config/                        # 설정 및 상수 (3 files)
+│   │   ├── __init__.py
+│   │   ├── constants.py                  # 12개 얼굴 영역 정의
+│   │   └── settings.py                   # DetectionConfig, VisualizationStyle
+│   │
+│   ├── 📁 core/                          # Layer 1: Core Detection (4 files)
+│   │   ├── __init__.py
+│   │   ├── face_detector.py              # FaceDetector (MediaPipe wrapper)
+│   │   ├── landmark_extractor.py         # LandmarkExtractor (468 landmarks)
+│   │   └── normalizer.py                 # CoordinateNormalizer
+│   │
+│   ├── 📁 processing/                    # Layer 2: Processing (4 files)
+│   │   ├── __init__.py
+│   │   ├── frame_processor.py            # FrameProcessor (파이프라인)
+│   │   ├── geometry.py                   # GeometryCalculator (각도/크기)
+│   │   └── result_handler.py             # ResultHandler (검증/smoothing)
+│   │
+│   ├── 📁 interface/                     # Layer 3: Interface (미구현)
+│   │   └── __init__.py
+│   │
+│   └── 📁 utils/                         # 유틸리티 (3 files)
+│       ├── __init__.py
+│       ├── exceptions.py                 # 5개 커스텀 예외 클래스
+│       └── validators.py                 # 검증 함수들
+│
+├── 📁 tests/                             # 테스트 (미구현)
+│   └── __init__.py
+│
+├── 📁 examples/                          # 예제 코드 (1 file)
+│   └── basic_usage.py                    # 기본 사용 예제
+│
+├── 📁 data/                              # 데이터 디렉토리
+│   ├── 📁 sample_images/                 # 샘플 이미지 (비어있음)
+│   └── 📁 output/                        # 출력 결과 (비어있음)
+│
+├── 📁 docs/                              # 문서 (비어있음)
+│
+└── 📁 venv/                              # Python 가상환경
+    ├── Python 3.12.12
+    ├── MediaPipe 0.10.21
+    ├── OpenCV 4.11.0
+    └── NumPy 1.26.4
+
+════════════════════════════════════════════════════════════════
+
+📊 구현 통계:
+   ✅ 총 파일: 17개 Python 파일
+   ✅ 코드 라인: ~1,500 라인
+   ✅ 클래스: 12개
+   ✅ 함수/메서드: 60+ 개
+
+🎯 완료된 Phase:
+   ✅ Phase 0: Project Setup
+   ✅ Phase 1: Data Models & Configuration
+   ✅ Phase 2: Core Detection Layer (Layer 1)
+   ✅ Phase 3: Processing Layer (Layer 2)
+
+📚 미완료 Phase (선택 사항):
+   ⏳ Phase 4: Testing & Validation
+   ⏳ Phase 5: Examples & Documentation
+   ⏳ Phase 6: Interface Layer (Layer 3)
+
+════════════════════════════════════════════════════════════════

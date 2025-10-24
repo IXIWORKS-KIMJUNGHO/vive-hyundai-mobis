@@ -1,0 +1,353 @@
+[
+  {
+    "filename": "camera_capture_20250513_180034.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 6.916999816894531,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 28.22,
+      "yaw": -1.03,
+      "roll": -0.1
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.046,
+        "right_eye_angle": -0.043,
+        "average_eye_angle": 0.045,
+        "overall_eye_shape": "downturned",
+        "confidence": 0.9886040957361439
+      },
+      "face_shape_analysis": {
+        "face_shape": "oval",
+        "aspect_ratio": 1.248,
+        "face_width": 363.0,
+        "face_height": 453.0,
+        "forehead_width": 342.0,
+        "cheekbone_width": 363.0,
+        "jawline_width": 289.0,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_180114.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 5.280733108520508,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 22.16,
+      "yaw": -1.09,
+      "roll": -2.53
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "downturned",
+        "left_eye_angle": 0.064,
+        "right_eye_angle": 0.032,
+        "average_eye_angle": 0.048,
+        "overall_eye_shape": "downturned",
+        "confidence": 0.9878595928513199
+      },
+      "face_shape_analysis": {
+        "face_shape": "round",
+        "aspect_ratio": 1.118,
+        "face_width": 391.0,
+        "face_height": 437.0,
+        "forehead_width": 357.0,
+        "cheekbone_width": 391.0,
+        "jawline_width": 324.0,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_180215.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 4.98199462890625,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 31.13,
+      "yaw": 0.86,
+      "roll": 0.73
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.046,
+        "right_eye_angle": -0.086,
+        "average_eye_angle": 0.066,
+        "overall_eye_shape": "neutral",
+        "confidence": 0.9904599220845782
+      },
+      "face_shape_analysis": {
+        "face_shape": "round",
+        "aspect_ratio": 1.12,
+        "face_width": 466.0,
+        "face_height": 522.1,
+        "forehead_width": 431.0,
+        "cheekbone_width": 466.0,
+        "jawline_width": 378.0,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_185039.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 4.92095947265625,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 26.16,
+      "yaw": -0.04,
+      "roll": 6.16
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.166,
+        "right_eye_angle": -0.154,
+        "average_eye_angle": 0.16,
+        "overall_eye_shape": "upturned",
+        "confidence": 0.9995493593155778
+      },
+      "face_shape_analysis": {
+        "face_shape": "round",
+        "aspect_ratio": 1.109,
+        "face_width": 399.3,
+        "face_height": 443.0,
+        "forehead_width": 365.3,
+        "cheekbone_width": 399.3,
+        "jawline_width": 324.9,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_185711.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 5.061149597167969,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 26.98,
+      "yaw": -2.99,
+      "roll": 4.44
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.078,
+        "right_eye_angle": -0.026,
+        "average_eye_angle": 0.052,
+        "overall_eye_shape": "neutral",
+        "confidence": 0.9668169316435544
+      },
+      "face_shape_analysis": {
+        "face_shape": "oval",
+        "aspect_ratio": 1.23,
+        "face_width": 344.3,
+        "face_height": 423.5,
+        "forehead_width": 321.2,
+        "cheekbone_width": 344.3,
+        "jawline_width": 287.4,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_191504.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 5.027055740356445,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 36.05,
+      "yaw": -0.12,
+      "roll": 4.15
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.095,
+        "right_eye_angle": -0.092,
+        "average_eye_angle": 0.094,
+        "overall_eye_shape": "neutral",
+        "confidence": 0.9986224652183797
+      },
+      "face_shape_analysis": {
+        "face_shape": "oval",
+        "aspect_ratio": 1.185,
+        "face_width": 442.5,
+        "face_height": 524.5,
+        "forehead_width": 411.5,
+        "cheekbone_width": 442.5,
+        "jawline_width": 365.4,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_191910.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 4.944086074829102,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 24.69,
+      "yaw": -1.44,
+      "roll": 2.11
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.087,
+        "right_eye_angle": -0.119,
+        "average_eye_angle": 0.103,
+        "overall_eye_shape": "upturned",
+        "confidence": 0.9840285542203229
+      },
+      "face_shape_analysis": {
+        "face_shape": "oval",
+        "aspect_ratio": 1.182,
+        "face_width": 354.3,
+        "face_height": 418.7,
+        "forehead_width": 322.3,
+        "cheekbone_width": 354.3,
+        "jawline_width": 288.3,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_191914.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 4.942178726196289,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 25.34,
+      "yaw": 1.57,
+      "roll": 5.47
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "upturned",
+        "right_eye_shape": "upturned",
+        "left_eye_angle": 0.09,
+        "right_eye_angle": -0.073,
+        "average_eye_angle": 0.081,
+        "overall_eye_shape": "neutral",
+        "confidence": 0.9825633136267073
+      },
+      "face_shape_analysis": {
+        "face_shape": "round",
+        "aspect_ratio": 1.12,
+        "face_width": 429.7,
+        "face_height": 481.4,
+        "forehead_width": 397.8,
+        "cheekbone_width": 429.7,
+        "jawline_width": 353.4,
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "filename": "camera_capture_20250513_212618.png",
+    "success": true,
+    "image_size": {
+      "width": 1280,
+      "height": 800
+    },
+    "detection": {
+      "confidence": 1.0,
+      "processing_time_ms": 4.956960678100586,
+      "num_landmarks": 478
+    },
+    "face_geometry": {
+      "pitch": 22.61,
+      "yaw": -0.23,
+      "roll": 4.34
+    },
+    "analysis": {
+      "eye_analysis": {
+        "left_eye_shape": "downturned",
+        "right_eye_shape": "downturned",
+        "left_eye_angle": -0.038,
+        "right_eye_angle": 0.05,
+        "average_eye_angle": 0.044,
+        "overall_eye_shape": "downturned",
+        "confidence": 0.9974017996461542
+      },
+      "face_shape_analysis": {
+        "face_shape": "oval",
+        "aspect_ratio": 1.171,
+        "face_width": 415.7,
+        "face_height": 486.7,
+        "forehead_width": 389.6,
+        "cheekbone_width": 415.7,
+        "jawline_width": 336.4,
+        "confidence": 0.9
+      }
+    }
+  }
+]
