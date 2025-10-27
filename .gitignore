@@ -1,10 +1,25 @@
 # Python
 venv/
+.venv/
+env/
+.env/
+ENV/
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
+*.pyd
+*.so
+*.egg
 *.egg-info/
+dist/
+build/
 .pytest_cache/
+.tox/
+.coverage
+htmlcov/
+*.cover
 
 # Claude Code
 .claude/

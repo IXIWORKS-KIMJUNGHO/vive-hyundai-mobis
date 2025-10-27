@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """
 Unified Face Analyzer TCP Server
-Unreal Engine과 연동하여 실시간 얼굴 분석 수행
+클라이언트로부터 이미지를 수신하여 실시간 얼굴 분석 수행
+
+⚠️ 주의: 이 파일은 camera_client_python.py와 다른 역할입니다!
+- tcp_server.py: 얼굴 분석 서비스 제공 (서버 역할, Port 10000)
+- camera_client_python.py: IR Camera에서 Raw Y8 수신 (클라이언트 역할, Port 5001)
 
 Protocol:
-1. Unreal → Python: Raw image data (바이너리)
-2. Python: UnifiedFaceAnalyzer로 분석
-3. Python → Unreal: JSON 결과
+1. Client → Server: 이미지 데이터 (JPEG/PNG/Raw Y8 자동 감지)
+2. Server: UnifiedFaceAnalyzer로 분석
+3. Server → Client: JSON 분석 결과 (TCP_SPEC 형식)
 
-Port: 5000 (default)
+지원 이미지 형식:
+- JPEG (시그니처 감지)
+- PNG (시그니처 감지)
+- Raw Y8 (크기 기반 감지: 1280x800, 1280x720, 1920x1080)
+
+Port: 10000 (default)
 """
 
 import socket
 import json
 import logging
-import struct
 from typing import Optional, Dict, Any
 from io import BytesIO
 from PIL import Image
@@ -68,7 +76,7 @@ class UnifiedFaceAnalysisTCPServer:
     def __init__(
         self,
         host: str = '0.0.0.0',
-        port: int = 5000,
+        port: int = 10000,
         max_connections: int = 5
     ):
         """
@@ -132,45 +140,181 @@ class UnifiedFaceAnalysisTCPServer:
             logger.info("TCP server stopped")
             print("\n✅ TCP 서버 종료")
 
-    def receive_image(self, client_socket: socket.socket) -> Optional[np.ndarray]:
+    def _detect_image_format(self, data: bytes) -> str:
         """
-        클라이언트로부터 이미지 데이터 수신
-
-        Protocol:
-        1. 4 bytes: 이미지 데이터 크기 (uint32, little-endian)
-        2. N bytes: 이미지 바이너리 데이터 (JPEG/PNG)
+        이미지 데이터 형식 자동 감지
 
         Args:
-            client_socket: 클라이언트 소켓
+            data: 이미지 바이너리 데이터
+
+        Returns:
+            'png', 'jpeg', 'raw_y8', 또는 'unknown'
+        """
+        if len(data) < 8:
+            return 'unknown'
+
+        # PNG 시그니처: 89 50 4E 47 0D 0A 1A 0A
+        if data[:8] == b'\x89PNG\r\n\x1a\n':
+            return 'png'
+
+        # JPEG 시그니처: FF D8 FF
+        if data[:3] == b'\xff\xd8\xff':
+            return 'jpeg'
+
+        # Raw Y8 추정 (인코딩된 이미지가 아닌 경우)
+        # 일반적으로 1280x800 = 1,024,000 bytes
+        if len(data) in [1024000, 921600, 2073600]:  # 1280x800, 1280x720, 1920x1080
+            return 'raw_y8'
+
+        return 'unknown'
+
+    def _decode_raw_y8(self, data: bytes, width: int = 1280, height: int = 800) -> Optional[np.ndarray]:
+        """
+        Raw Y8 데이터를 BGR 이미지로 변환
+
+        Args:
+            data: Raw Y8 바이너리 데이터
+            width: 이미지 너비
+            height: 이미지 높이
 
         Returns:
             numpy array (BGR 포맷) 또는 None
         """
         try:
-            # 1. 이미지 크기 수신 (4 bytes)
-            size_data = client_socket.recv(4)
-            if len(size_data) < 4:
-                logger.warning("Failed to receive image size")
+            expected_size = width * height
+
+            if len(data) != expected_size:
+                logger.warning(f"Y8 data size mismatch: expected {expected_size}, got {len(data)}")
+                # 일반적인 해상도로 재시도
+                common_resolutions = [
+                    (1280, 800),
+                    (1280, 720),
+                    (1920, 1080),
+                    (640, 480)
+                ]
+                for w, h in common_resolutions:
+                    if len(data) == w * h:
+                        width, height = w, h
+                        logger.info(f"Auto-detected resolution: {width}x{height}")
+                        break
+                else:
+                    logger.error("Cannot determine Y8 image resolution")
+                    return None
+
+            # Y8 배열로 변환
+            y8_array = np.frombuffer(data, dtype=np.uint8)
+
+            # 2D 배열로 reshape
+            y8_image = y8_array.reshape((height, width))
+
+            # Grayscale → BGR 변환
+            bgr_image = cv2.cvtColor(y8_image, cv2.COLOR_GRAY2BGR)
+
+            logger.info(f"Raw Y8 decoded: {bgr_image.shape}")
+            return bgr_image
+
+        except Exception as e:
+            logger.error(f"Error decoding raw Y8: {e}")
+            return None
+
+    def receive_image(self, client_socket: socket.socket, buffer_size: int = 1024000) -> Optional[np.ndarray]:
+        """
+        클라이언트로부터 이미지 데이터 수신 (자동 형식 감지)
+
+        Protocol (No size header):
+        - 직접 raw 데이터 수신 (JPEG/PNG/Raw Y8)
+        - 첫 번째 청크에서 형식 자동 감지
+
+        Args:
+            client_socket: 클라이언트 소켓
+            buffer_size: 수신 버퍼 크기 (기본: 1024000 = 1280x800 Y8)
+
+        Returns:
+            numpy array (BGR 포맷) 또는 None
+        """
+        try:
+            # 1. 첫 번째 청크 수신 (형식 감지용)
+            logger.info(f"Waiting to receive image data (buffer_size: {buffer_size})...")
+            first_chunk = client_socket.recv(buffer_size)
+
+            if not first_chunk:
+                logger.warning("No data received")
                 return None
 
-            image_size = struct.unpack('<I', size_data)[0]  # little-endian uint32
-            logger.debug(f"Image size: {image_size} bytes")
+            logger.info(f"Received {len(first_chunk)} bytes")
 
-            # 2. 이미지 데이터 수신
-            image_data = b''
-            remaining = image_size
+            # 디버그: 첫 16 bytes hex dump
+            hex_preview = ' '.join(f'{b:02x}' for b in first_chunk[:16])
+            logger.info(f"First 16 bytes (hex): {hex_preview}")
 
-            while remaining > 0:
-                chunk = client_socket.recv(min(remaining, 65536))  # 64KB chunks
-                if not chunk:
-                    logger.error("Connection closed while receiving image")
-                    return None
-                image_data += chunk
-                remaining -= len(chunk)
+            # 2. 이미지 형식 자동 감지
+            image_format = self._detect_image_format(first_chunk)
+            logger.info(f"Detected image format: {image_format}")
 
-            # 3. 이미지 디코딩
-            image_array = np.frombuffer(image_data, dtype=np.uint8)
-            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            # 3. Raw Y8인 경우 정확한 크기로 수신
+            if image_format == 'raw_y8':
+                expected_size = len(first_chunk)
+                logger.info(f"Raw Y8 detected, received size: {expected_size}")
+
+                # 일반적인 Y8 크기 확인
+                if expected_size not in [1024000, 921600, 2073600]:
+                    # 크기가 정확하지 않으면 더 수신 필요
+                    logger.warning(f"Unexpected Y8 size: {expected_size}, trying to receive more")
+                    image_data = first_chunk
+                    while len(image_data) < buffer_size:
+                        chunk = client_socket.recv(buffer_size - len(image_data))
+                        if not chunk:
+                            break
+                        image_data += chunk
+                    logger.info(f"After additional recv: {len(image_data)} bytes total")
+                else:
+                    image_data = first_chunk
+                    logger.info(f"Y8 size is valid: {expected_size} bytes")
+
+                # Raw Y8 디코딩
+                logger.info(f"Decoding Y8 data: {len(image_data)} bytes")
+                image = self._decode_raw_y8(image_data)
+
+                if image is not None:
+                    logger.info(f"Y8 decoding successful: {image.shape}")
+                else:
+                    logger.error("Y8 decoding failed")
+
+            elif image_format in ['png', 'jpeg']:
+                # 인코딩된 이미지는 더 많은 데이터 수신 필요할 수 있음
+                image_data = first_chunk
+
+                # PNG/JPEG는 전체 데이터가 필요 (일반적으로 첫 청크에 포함되지만 큰 경우 추가 수신)
+                # 타임아웃 설정으로 추가 데이터가 없으면 중단
+                client_socket.settimeout(0.1)  # 100ms timeout
+                try:
+                    while True:
+                        chunk = client_socket.recv(65536)
+                        if not chunk:
+                            break
+                        image_data += chunk
+                except socket.timeout:
+                    # 타임아웃은 정상 (더 이상 데이터 없음)
+                    pass
+                finally:
+                    client_socket.settimeout(None)  # 타임아웃 해제
+
+                # 이미지 디코딩
+                image_array = np.frombuffer(image_data, dtype=np.uint8)
+                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+            else:
+                logger.warning(f"Unknown image format, trying standard decode...")
+                image_data = first_chunk
+
+                # Fallback: 일반 디코딩 시도
+                image_array = np.frombuffer(image_data, dtype=np.uint8)
+                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                # 디코딩 실패 시 Raw Y8로 재시도
+                if image is None:
+                    logger.info("Standard decode failed, trying raw Y8...")
+                    image = self._decode_raw_y8(image_data)
 
             if image is None:
                 logger.error("Failed to decode image")
@@ -332,9 +476,8 @@ class UnifiedFaceAnalysisTCPServer:
         """
         JSON 결과를 클라이언트에 전송
 
-        Protocol:
-        1. 4 bytes: JSON 데이터 크기 (uint32, little-endian)
-        2. N bytes: JSON 문자열 (UTF-8)
+        Protocol (No size header):
+        - 직접 JSON 문자열 전송 (UTF-8)
 
         Args:
             client_socket: 클라이언트 소켓
@@ -355,14 +498,10 @@ class UnifiedFaceAnalysisTCPServer:
             json_bytes = json_str.encode('utf-8')
             logger.debug(f"JSON serialization successful: {len(json_bytes)} bytes")
 
-            # 크기 전송 (4 bytes)
-            size_bytes = struct.pack('<I', len(json_bytes))
-            client_socket.sendall(size_bytes)
-
-            # JSON 데이터 전송
+            # JSON 데이터 전송 (4-byte size header 없이)
             client_socket.sendall(json_bytes)
 
-            logger.info(f"JSON result sent: {len(json_bytes)} bytes")
+            logger.info(f"JSON result sent: {len(json_bytes)} bytes (no size header)")
             return True
 
         except TypeError as e:
@@ -404,10 +543,30 @@ class UnifiedFaceAnalysisTCPServer:
                 start_time = time.time()
 
                 # 임시 파일로 저장 (UnifiedFaceAnalyzer가 파일 경로를 요구함)
-                temp_path = "/tmp/unreal_temp_image.jpg"
-                cv2.imwrite(temp_path, image)
+                import tempfile
+                import os
 
+                # 크로스 플랫폼 임시 파일 생성
+                temp_fd, temp_path = tempfile.mkstemp(suffix='.jpg', prefix='unreal_')
+                os.close(temp_fd)  # 파일 디스크립터 닫기
+
+                logger.info(f"Saving image to temp file: {temp_path}")
+                write_success = cv2.imwrite(temp_path, image)
+
+                if not write_success:
+                    logger.error(f"Failed to write image to {temp_path}")
+                    print(f"❌ 이미지 저장 실패: {temp_path}")
+                    break
+
+                logger.info(f"Image saved successfully, starting analysis...")
                 result = self.analyzer.analyze_image(temp_path)
+                logger.info(f"Analysis completed")
+
+                # 임시 파일 삭제
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
 
                 analysis_time = (time.time() - start_time) * 1000
                 print(f"✅ 분석 완료: {analysis_time:.2f}ms")

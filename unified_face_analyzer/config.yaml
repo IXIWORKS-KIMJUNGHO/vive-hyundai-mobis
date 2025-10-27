@@ -15,16 +15,16 @@ server:
 environments:
   development:
     host: "127.0.0.1"     # 로컬 테스트용
-    port: 5001
+    port: 10000
 
   production:
     host: "0.0.0.0"       # 외부 연결 허용
-    port: 5001
+    port: 10000
 
   # 특정 IP만 허용 (보안 강화)ㄴㄴㄴㄴㄴㄴㄴㄴㄴㄴ
   restricted:
     host: "172.30.1.45"   # 특정 네트워크 인터페이스만
-    port: 5001
+    port: 10000
 
 # 로깅 설정
 logging:
