@@ -122,6 +122,7 @@ class UnifiedFaceAnalysisTCPServer:
             print(f"✅ TCP 서버 시작: {self.host}:{self.port}")
             print(f"📡 연결 대기 중... (최대 {self.max_connections}개 연결)")
             print(f"🎯 분석 모듈: MediaPipe + Hairstyle + Eye Shape + Face Shape")
+            print(f"⚠️  종료하려면 Ctrl+C를 누르세요")
             print("=" * 80)
             print()
 
@@ -138,7 +139,7 @@ class UnifiedFaceAnalysisTCPServer:
         if self.server_socket:
             self.server_socket.close()
             logger.info("TCP server stopped")
-            print("\n✅ TCP 서버 종료")
+            print("✅ TCP 서버 종료 완료")
 
     def _detect_image_format(self, data: bytes) -> str:
         """
@@ -609,19 +610,30 @@ class UnifiedFaceAnalysisTCPServer:
         if not self.is_running:
             self.start()
 
+        # 타임아웃 설정 (Ctrl+C 즉시 반응 위함)
+        self.server_socket.settimeout(1.0)  # 1초마다 체크
+
         try:
             while self.is_running:
-                # 클라이언트 연결 대기
-                client_socket, client_address = self.server_socket.accept()
+                try:
+                    # 클라이언트 연결 대기 (1초 타임아웃)
+                    client_socket, client_address = self.server_socket.accept()
 
-                # 클라이언트 처리 (동기 방식)
-                self.handle_client(client_socket, client_address)
+                    # 클라이언트 처리 (동기 방식)
+                    self.handle_client(client_socket, client_address)
+
+                except socket.timeout:
+                    # 타임아웃은 정상 동작 (Ctrl+C 감지용)
+                    pass
+                except KeyboardInterrupt:
+                    # accept() 중 Ctrl+C → 상위로 전파
+                    raise
 
         except KeyboardInterrupt:
-            print("\n\n⚠️  서버 종료 요청 (Ctrl+C)")
+            print("\n⚠️  서버 종료 요청 (Ctrl+C)")
         except Exception as e:
             logger.error(f"Server error: {e}", exc_info=True)
-            print(f"\n❌ 서버 오류: {e}")
+            print(f"❌ 서버 오류: {e}")
         finally:
             self.stop()
 
