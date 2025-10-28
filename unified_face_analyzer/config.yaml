@@ -60,7 +60,7 @@ mediapipe:
 
 # 모델 경로
 models:
-  dlib_predictor: "data/shape_predictor_68_face_landmarks.dat"
+  # dlib_predictor: "data/shape_predictor_68_face_landmarks.dat"  # Deprecated: MediaPipe로 대체됨
   bisenet_weights: "data/79999_iter.pth"
 
 # BiSeNet 설정

@@ -1,9 +1,11 @@
 """
 Stage 2: Geometric analysis for non-bangs hairstyles (All-Back, Center Part, Side Part).
 [MODIFIED] Uses BiSeNet hair mask instead of brightness-based detection.
+[UPDATED] MediaPipe-compatible types (no dlib dependency).
 """
 import cv2
 import numpy as np
+from typing import Tuple, Optional, Dict, Any
 from utils import get_config
 from utils import get_logger
 
@@ -18,14 +20,18 @@ class GeometricAnalyzer:
         """
         Performs the detailed geometric analysis on the forehead region.
         [MODIFIED] Now accepts 'hair_mask' and 'eyebrow_mask' from BiSeNet for accurate detection.
-        
+        [UPDATED] Compatible with MediaPipe Rectangle & FullObjectDetection.
+
         Args:
-            img_gray: Grayscale image
-            face: dlib face rectangle
-            landmarks: dlib facial landmarks
-            person_silhouette: Person silhouette mask
-            hair_mask: BiSeNet hair segmentation mask
-            eyebrow_mask: BiSeNet eyebrow segmentation mask
+            img_gray: Grayscale image (np.ndarray)
+            face: Face rectangle (MediaPipe Rectangle or dlib.rectangle compatible)
+            landmarks: Facial landmarks (MediaPipe FullObjectDetection or dlib compatible)
+            person_silhouette: Person silhouette mask (np.ndarray)
+            hair_mask: BiSeNet hair segmentation mask (np.ndarray, optional)
+            eyebrow_mask: BiSeNet eyebrow segmentation mask (np.ndarray, optional)
+
+        Returns:
+            Tuple[str, Dict]: (classification, analysis_results)
         """
         logger.info("[Stage 2] Performing geometric analysis with BiSeNet hair mask...")
         

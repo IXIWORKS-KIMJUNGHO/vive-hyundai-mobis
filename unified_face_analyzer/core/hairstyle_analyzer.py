@@ -4,7 +4,6 @@ import os
 import traceback
 import cv2
 import numpy as np
-import dlib
 from PIL import Image
 
 import torch
@@ -13,6 +12,7 @@ import torchvision.transforms as transforms
 from .bisenet import BiSeNet
 from .clip_classifier import CLIPClassifier
 from .geometric_analyzer import GeometricAnalyzer
+from .mediapipe import MediaPipeFaceDetector, MediaPipeShapePredictor
 from utils import get_config, get_logger
 
 logger = get_logger(__name__)
@@ -26,12 +26,19 @@ class HairstyleAnalyzer:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Load dlib model from config
-        predictor_path = self.config.models.dlib_predictor
-        if not os.path.exists(predictor_path):
-            raise FileNotFoundError(f"Dlib model not found at '{predictor_path}'.")
-        self.dlib_detector = dlib.get_frontal_face_detector()
-        self.dlib_predictor = dlib.shape_predictor(predictor_path)
+        # MediaPipe face detector & landmark predictor (dlib 대체)
+        logger.info("Initializing MediaPipe face detector (replacing dlib)...")
+        self.face_detector = MediaPipeFaceDetector(
+            static_image_mode=True,
+            max_num_faces=1,
+            min_detection_confidence=0.5
+        )
+        self.shape_predictor = MediaPipeShapePredictor(
+            static_image_mode=True,
+            max_num_faces=1,
+            min_detection_confidence=0.5
+        )
+        logger.info("MediaPipe models initialized successfully (68-point landmarks)")
 
         self.clip_classifier = CLIPClassifier(self.device)
 
@@ -233,11 +240,16 @@ class HairstyleAnalyzer:
             img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             pil_img = Image.open(image_path).convert("RGB")
 
-            faces = self.dlib_detector(img_gray, 1)
-            if not faces: 
-                raise ValueError("No face detected.")
+            # MediaPipe 얼굴 검출 (dlib 대체)
+            faces = self.face_detector(img_gray, 1)
+            if not faces:
+                raise ValueError("No face detected by MediaPipe.")
             face = max(faces, key=lambda rect: rect.width() * rect.height())
-            landmarks = self.dlib_predictor(img_gray, face)
+
+            # MediaPipe 68점 랜드마크 추출 (dlib 대체)
+            landmarks = self.shape_predictor(img_gray, face)
+            if landmarks is None:
+                raise ValueError("Failed to extract facial landmarks.")
 
             # Stage 1: BiSeNet 세그멘테이션
             logger.info("[Stage 1] Running BiSeNet segmentation...")

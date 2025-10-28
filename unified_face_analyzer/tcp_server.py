@@ -338,11 +338,8 @@ class UnifiedFaceAnalysisTCPServer:
         Returns:
             JSON 직렬화 가능한 객체
         """
-        try:
-            import dlib
-            has_dlib = True
-        except ImportError:
-            has_dlib = False
+        # MediaPipe 호환 객체 필터링
+        from core.mediapipe import Rectangle, FullObjectDetection
 
         if isinstance(obj, dict):
             result = {}
@@ -358,8 +355,8 @@ class UnifiedFaceAnalysisTCPServer:
         elif isinstance(obj, np.ndarray):
             # numpy array는 제거 (visualization_image 등)
             return None
-        elif has_dlib and isinstance(obj, (dlib.rectangle, dlib.full_object_detection)):
-            # dlib 객체는 제거
+        elif isinstance(obj, (Rectangle, FullObjectDetection)):
+            # MediaPipe 호환 객체는 제거 (JSON 직렬화 불가)
             return None
         elif isinstance(obj, (str, int, float, bool, type(None))):
             # JSON 기본 타입

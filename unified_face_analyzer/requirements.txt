@@ -6,8 +6,7 @@ numpy>=1.24.0
 Pillow>=10.0.0
 
 # Face Analysis
-mediapipe>=0.10.0        # MediaPipe 468-point landmark detection
-dlib>=19.24.0            # dlib 68-point landmark detection
+mediapipe>=0.10.0        # MediaPipe 468-point landmark detection (replaces dlib)
 
 # CLIP (for gender, glasses, beard classification)
 git+https://github.com/openai/CLIP.git
