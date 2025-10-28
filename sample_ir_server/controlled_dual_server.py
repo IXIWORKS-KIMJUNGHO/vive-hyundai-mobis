@@ -69,6 +69,8 @@ class ControlledJSONServer:
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Nagle 알고리즘 비활성화 (즉시 전송)
+            self.server_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.server_socket.bind(('0.0.0.0', self.port))
             self.server_socket.listen(5)
 
@@ -140,6 +142,10 @@ class ControlledJSONServer:
     def _handle_commands(self, client_socket: socket.socket, client_address: tuple):
         """클라이언트 명령 처리 (별도 스레드)"""
         try:
+            # 클라이언트 소켓 최적화
+            client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)  # 1MB 송신 버퍼
+
             # 스트리밍 클라이언트 리스트에 추가
             with self.clients_lock:
                 self.clients.append((client_socket, client_address))
@@ -277,6 +283,8 @@ class ControlledY8Server:
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Nagle 알고리즘 비활성화 (즉시 전송)
+            self.server_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.server_socket.bind(('0.0.0.0', self.port))
             self.server_socket.listen(5)
 
@@ -331,6 +339,10 @@ class ControlledY8Server:
         while self.is_running:
             try:
                 client_socket, client_address = self.server_socket.accept()
+
+                # 클라이언트 소켓 최적화
+                client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2 * 1024 * 1024)  # 2MB 송신 버퍼
 
                 with self.clients_lock:
                     self.clients.append((client_socket, client_address))
