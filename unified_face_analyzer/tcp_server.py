@@ -660,33 +660,67 @@ class UnifiedFaceAnalysisTCPServer:
 
         try:
             while self.is_running:
-                # 1. "analyze" 명령어 수신 대기
-                print("📨 'analyze' 명령어 대기 중...")
+                # 1. "analyze" + 이미지 데이터 동시 수신
+                print("📨 데이터 수신 대기 중...")
+
+                # 첫 번째 청크 수신 (analyze 문자열 + 이미지 시작 부분)
+                first_chunk = client_socket.recv(1024 * 1024)  # 1MB 버퍼
+
+                if not first_chunk:
+                    print("⚠️  연결 끊김")
+                    break
+
+                # "analyze" 문자열 확인 (처음 7 bytes)
+                if len(first_chunk) < 7:
+                    print(f"⚠️  데이터 부족: {len(first_chunk)} bytes (최소 7 bytes 필요)")
+                    continue
+
                 try:
-                    command_data = client_socket.recv(1024)
-
-                    if not command_data:
-                        print("⚠️  연결 끊김")
-                        break
-
-                    command = command_data.decode('utf-8').strip()
+                    command = first_chunk[:7].decode('utf-8')
 
                     if command != "analyze":
                         print(f"⚠️  올바르지 않은 명령어: '{command}' (예상: 'analyze')")
                         continue
 
-                    print("✅ 'analyze' 명령어 수신 - 이미지 데이터 대기 중...")
+                    print("✅ 'analyze' 명령어 수신 - 이미지 데이터 추출 중...")
 
                 except UnicodeDecodeError:
-                    print("❌ 명령어 디코딩 실패 - UTF-8 문자열 필요")
-                    continue
-                except Exception as e:
-                    print(f"❌ 명령어 수신 에러: {e}")
+                    print("❌ 명령어 디코딩 실패 - 처음 7 bytes가 UTF-8 'analyze'여야 함")
                     continue
 
-                # 2. 이미지 수신
-                # "📥 이미지 수신 중..." 메시지는 receive_image 내부 로거에서 처리
-                image = self.receive_image(client_socket)
+                # 2. 이미지 데이터 추출 (7 bytes 이후, 무조건 1280x800)
+                image_data_start = first_chunk[7:]
+                expected_image_size = 1024000  # 1280x800 Y8 (무조건 이 크기)
+                received_image_size = len(image_data_start)
+
+                print(f"📦 이미지 데이터 수신: {received_image_size:,} / {expected_image_size:,} bytes")
+
+                # 나머지 이미지 데이터 수신
+                if received_image_size < expected_image_size:
+                    remaining = expected_image_size - received_image_size
+                    print(f"   → 나머지 {remaining:,} bytes 수신 중...")
+
+                    additional_data = self._recv_exactly(client_socket, remaining, timeout=10.0)
+
+                    if additional_data is None:
+                        print("❌ 나머지 이미지 데이터 수신 실패")
+                        continue
+
+                    image_data = image_data_start + additional_data
+                    print(f"✅ 전체 이미지 수신 완료: {len(image_data):,} bytes")
+                elif received_image_size > expected_image_size:
+                    # 과다 수신 - 처음 1,024,000만 사용 (1280x800 강제)
+                    print(f"⚠️  과다 수신: {received_image_size:,} bytes")
+                    image_data = image_data_start[:expected_image_size]
+                    print(f"   → 처음 {expected_image_size:,} bytes만 사용 (1280x800 강제)")
+                else:
+                    # 정확한 크기
+                    image_data = image_data_start
+                    print("✅ 정확한 크기 수신")
+
+                # 3. Y8 이미지 디코딩 (무조건 1280x800)
+                print("🖼️  Y8 이미지 디코딩 중 (1280x800)...")
+                image = self._decode_raw_y8(image_data)
 
                 # 데이터 대기 시간 계산
                 current_time = time.time()
