@@ -660,7 +660,31 @@ class UnifiedFaceAnalysisTCPServer:
 
         try:
             while self.is_running:
-                # 1. 이미지 수신
+                # 1. "analyze" 명령어 수신 대기
+                print("📨 'analyze' 명령어 대기 중...")
+                try:
+                    command_data = client_socket.recv(1024)
+
+                    if not command_data:
+                        print("⚠️  연결 끊김")
+                        break
+
+                    command = command_data.decode('utf-8').strip()
+
+                    if command != "analyze":
+                        print(f"⚠️  올바르지 않은 명령어: '{command}' (예상: 'analyze')")
+                        continue
+
+                    print("✅ 'analyze' 명령어 수신 - 이미지 데이터 대기 중...")
+
+                except UnicodeDecodeError:
+                    print("❌ 명령어 디코딩 실패 - UTF-8 문자열 필요")
+                    continue
+                except Exception as e:
+                    print(f"❌ 명령어 수신 에러: {e}")
+                    continue
+
+                # 2. 이미지 수신
                 # "📥 이미지 수신 중..." 메시지는 receive_image 내부 로거에서 처리
                 image = self.receive_image(client_socket)
 
@@ -669,6 +693,8 @@ class UnifiedFaceAnalysisTCPServer:
                 idle_time = current_time - last_data_time
 
                 if image is None:
+                    # 타임아웃 또는 수신 실패
+                    print("❌ 이미지 수신 실패")
                     # 중복 메시지는 receive_image()에서 필터링됨
                     self.connection_stats['failed_receives'] += 1
 
