@@ -102,16 +102,23 @@ class RealtimeY8Viewer:
                 received_size = len(first_chunk)
                 print(f"📦 수신: {received_size:,} bytes", end='')
 
-                # 크기 검증 및 조정
+                # 크기 검증 및 해상도 자동 감지
                 if received_size == self.expected_size:
-                    # 정확한 크기
+                    # 정확한 크기 (1280x800)
                     image_data = first_chunk
+                    width, height = self.width, self.height
                     print(" ✅")
+                elif received_size == 1048576:  # 1024x1024
+                    # 1024x1024 해상도
+                    print(f" ⚠️  다른 해상도 감지: 1024x1024")
+                    image_data = first_chunk
+                    width, height = 1024, 1024
                 elif received_size > self.expected_size:
                     # 크기가 큼 - 처음 1,024,000만 사용
                     print(f" ⚠️  과다 수신")
                     print(f"   → 처음 {self.expected_size:,} bytes만 사용 (나머지 {received_size - self.expected_size:,} bytes 버림)")
                     image_data = first_chunk[:self.expected_size]
+                    width, height = self.width, self.height
                 elif received_size < self.expected_size:
                     # 크기가 작음 - 나머지 수신
                     print(f" ⚠️  부분 수신")
@@ -125,10 +132,11 @@ class RealtimeY8Viewer:
                         continue
 
                     image_data = first_chunk + additional_data
+                    width, height = self.width, self.height
                     print(f"   ✅ 전체 수신 완료: {len(image_data):,} bytes")
 
                 # 이미지 처리 및 큐에 추가
-                bgr_image = self._process_y8_data(image_data)
+                bgr_image = self._process_y8_data(image_data, width, height)
 
                 if bgr_image is not None:
                     # 큐가 가득 차면 오래된 프레임 버림
@@ -171,17 +179,28 @@ class RealtimeY8Viewer:
             print(f"❌ 수신 에러: {e}")
             return None
 
-    def _process_y8_data(self, data: bytes) -> np.ndarray:
+    def _process_y8_data(self, data: bytes, width: int = None, height: int = None) -> np.ndarray:
         """
         CameraClient.cs와 동일한 Y8 처리
         - Y8 → Grayscale
         - Y축 뒤집기
         - Grayscale → BGR
+
+        Args:
+            data: Y8 raw bytes
+            width: 이미지 너비 (None이면 self.width 사용)
+            height: 이미지 높이 (None이면 self.height 사용)
         """
         try:
+            # 해상도 결정
+            if width is None:
+                width = self.width
+            if height is None:
+                height = self.height
+
             # Y8 데이터를 numpy array로 변환
             y8_array = np.frombuffer(data, dtype=np.uint8)
-            y8_image = y8_array.reshape((self.height, self.width))
+            y8_image = y8_array.reshape((height, width))
 
             # Y축 뒤집기 (CameraClient.cs 호환)
             y8_flipped = np.flipud(y8_image)
