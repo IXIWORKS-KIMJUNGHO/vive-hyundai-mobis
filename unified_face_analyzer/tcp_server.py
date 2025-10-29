@@ -310,8 +310,8 @@ class UnifiedFaceAnalysisTCPServer:
         클라이언트로부터 이미지 데이터 수신 (자동 형식 감지)
 
         Protocol:
-        - Raw Y8: "STRT" (4 bytes) + 1,024,000 bytes
-        - PNG/JPEG: 직접 데이터 수신 (매직 넘버로 감지)
+        - Raw Y8: 1,024,000 bytes (1280x800 grayscale)
+        - PNG/JPEG: 매직 넘버로 감지
 
         Args:
             client_socket: 클라이언트 소켓
@@ -321,11 +321,11 @@ class UnifiedFaceAnalysisTCPServer:
             numpy array (BGR 포맷) 또는 None
         """
         try:
-            # 1. 첫 4 bytes 수신 (프로토콜 감지)
+            # 1. 첫 번째 청크 수신
             logger.info(f"Waiting to receive image data...")
-            header = client_socket.recv(4)
+            first_chunk = client_socket.recv(buffer_size)
 
-            if not header:
+            if not first_chunk:
                 # 중복 메시지 필터링
                 if self.last_error_state != "no_data":
                     logger.warning("No data received")
@@ -338,44 +338,7 @@ class UnifiedFaceAnalysisTCPServer:
                 print("✅ 데이터 수신 재개")
                 self.last_error_state = None
 
-            # 2. "STRT" 매직 넘버 확인
-            if header == b'STRT':
-                print("🎬 START 신호 감지 - Y8 이미지 수신 시작")
-                logger.info("START signal detected, receiving Y8 image")
-
-                # 오래된 데이터 제거 (START 신호 이후 깨끗한 상태)
-                print("🗑️  버퍼 정리 중...")
-                self._clear_stale_data(client_socket)
-
-                # 정확히 1,024,000 bytes 수신
-                image_data = self._recv_exactly(client_socket, 1024000, timeout=10.0)
-
-                if image_data is None:
-                    logger.error("Failed to receive Y8 data after START signal")
-                    return None
-
-                print(f"✅ Y8 데이터 완전 수신: 1,024,000 / 1,024,000 bytes (100%)")
-
-                # Y8 디코딩
-                image = self._decode_raw_y8(image_data)
-
-                if image is not None:
-                    logger.info(f"Y8 decoding successful: {image.shape}")
-                else:
-                    logger.error("Y8 decoding failed")
-
-                return image
-
-            # 3. PNG/JPEG 감지 (기존 방식)
-            # 나머지 데이터 수신하여 first_chunk 구성
-            remaining = client_socket.recv(buffer_size - 4)
-            first_chunk = header + remaining
-
-            if not first_chunk:
-                logger.warning("No data received after header")
-                return None
-
-            print(f"📦 데이터 수신됨: {len(first_chunk):,} bytes (첫 번째 청크)")
+            print(f"📦 데이터 수신됨: {len(first_chunk):,} bytes")
             logger.info(f"Received {len(first_chunk)} bytes")
 
             # 디버그: 첫 16 bytes hex dump
@@ -386,11 +349,11 @@ class UnifiedFaceAnalysisTCPServer:
             else:
                 logger.warning("Received empty data")
 
-            # 4. 이미지 형식 자동 감지
+            # 2. 이미지 형식 자동 감지
             image_format = self._detect_image_format(first_chunk)
             logger.info(f"Detected image format: {image_format}")
 
-            # 5. Raw Y8인 경우 (START 신호 없이 온 경우 - 레거시 지원)
+            # 3. Raw Y8인 경우
             if image_format == 'raw_y8':
                 initial_size = len(first_chunk)
                 logger.info(f"Raw Y8 detected, initial received: {initial_size} bytes")
@@ -437,6 +400,7 @@ class UnifiedFaceAnalysisTCPServer:
                 else:
                     logger.error("Y8 decoding failed")
 
+            # 4. PNG/JPEG인 경우
             elif image_format in ['png', 'jpeg']:
                 # 인코딩된 이미지는 더 많은 데이터 수신 필요할 수 있음
                 image_data = first_chunk

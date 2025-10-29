@@ -421,9 +421,27 @@ class ControlledY8Server:
 
                 for client_socket, client_address in self.clients:
                     try:
-                        # 실제 IR 카메라처럼 데이터를 불규칙한 크기로 10번에 나눠서 전송 (헤더 없음)
+                        # 데이터 크기 검증 및 조정
                         data_size = len(self.y8_data)
+                        expected_size = self.width * self.height
 
+                        # 크기가 다르면 경고 및 조정
+                        if data_size != expected_size:
+                            print(f"⚠️  [Y8 Server] 데이터 크기 불일치: {data_size:,} bytes (예상: {expected_size:,} bytes)")
+
+                            if data_size > expected_size:
+                                # 크기가 크면 잘라냄
+                                print(f"   → 처음 {expected_size:,} bytes만 사용 (나머지 {data_size-expected_size:,} bytes 버림)")
+                                self.y8_data = self.y8_data[:expected_size]
+                                data_size = expected_size
+                            else:
+                                # 크기가 작으면 0으로 패딩
+                                padding_size = expected_size - data_size
+                                print(f"   → {padding_size:,} bytes 패딩 추가")
+                                self.y8_data = self.y8_data + b'\x00' * padding_size
+                                data_size = expected_size
+
+                        # 실제 IR 카메라처럼 데이터를 불규칙한 크기로 10번에 나눠서 전송 (헤더 없음)
                         # 불규칙한 청크 비율 (총합 100%)
                         chunk_ratios = [0.12, 0.08, 0.15, 0.09, 0.11, 0.13, 0.07, 0.10, 0.09, 0.06]
 
