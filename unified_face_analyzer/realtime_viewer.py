@@ -113,7 +113,7 @@ class RealtimeY8Viewer:
             print(f"🔌 클라이언트 연결 종료: {client_address[0]}:{client_address[1]}")
 
     def _receive_to_single_buffer(self, client_socket):
-        """Android 스타일 단일 버퍼로 데이터 수신"""
+        """Android 스타일 단일 버퍼로 데이터 수신 - 무조건 1280x800"""
         try:
             # 첫 번째 청크 수신 (최대 1MB)
             first_chunk = client_socket.recv(1024 * 1024)
@@ -134,20 +134,15 @@ class RealtimeY8Viewer:
             # 단일 버퍼 초기화 (Android의 resetBuffer())
             self._single_buffer.clear()
 
-            # 크기 검증 및 해상도 자동 감지
+            # 무조건 1280x800 (1,024,000 bytes) 처리
             if received_size == self.expected_size:
                 self._single_buffer.extend(first_chunk)
                 print(" ✅")
                 return True
-            elif received_size == 1048576:  # 1024x1024
-                print(f" ⚠️  다른 해상도 감지: 1024x1024")
-                self._single_buffer.extend(first_chunk)
-                self._temp_width = 1024
-                self._temp_height = 1024
-                return True
+
             elif received_size > self.expected_size:
                 print(f" ⚠️  과다 수신")
-                print(f"   → 처음 {self.expected_size:,} bytes만 사용")
+                print(f"   → 처음 {self.expected_size:,} bytes만 사용 (1280x800 강제)")
                 self._single_buffer.extend(first_chunk[:self.expected_size])
                 return True
             elif received_size < self.expected_size:
@@ -175,16 +170,9 @@ class RealtimeY8Viewer:
         try:
             start_time = datetime.now()
 
-            # 해상도 결정
-            if hasattr(self, '_temp_width'):
-                width = self._temp_width
-                height = self._temp_height
-                delattr(self, '_temp_width')
-                delattr(self, '_temp_height')
-            else:
-                width = self.width
-                height = self.height
-
+            # 무조건 1280x800
+            width = self.width
+            height = self.height
             expected_total_size = width * height
 
             if len(self._single_buffer) >= expected_total_size:
