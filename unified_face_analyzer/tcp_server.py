@@ -970,6 +970,7 @@ def main():
     parser.add_argument('--max-connections', type=int, default=None, help='Max connections (overrides config)')
     parser.add_argument('--env', default='production', choices=['development', 'production', 'restricted'],
                         help='Environment (default: production)')
+    parser.add_argument('--no-viewer', action='store_true', help='Disable realtime viewer (default: enabled)')
 
     args = parser.parse_args()
 
@@ -1051,6 +1052,34 @@ def main():
     print("=" * 80)
     print()
 
+    # Realtime Viewer 실행 (옵션)
+    viewer_process = None
+    if not args.no_viewer:
+        try:
+            import subprocess
+            import os
+
+            viewer_script = os.path.join(os.path.dirname(__file__), 'realtime_viewer.py')
+
+            if os.path.exists(viewer_script):
+                print("🖼️  Realtime Viewer 시작 중...")
+                viewer_process = subprocess.Popen(
+                    [sys.executable, viewer_script, '--port', str(port)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                print(f"   ✅ Viewer 프로세스 시작됨 (PID: {viewer_process.pid})")
+                print(f"   💡 Viewer 창에서 'q' 키로 종료 가능")
+                print()
+            else:
+                print(f"   ⚠️  Realtime Viewer 스크립트를 찾을 수 없습니다: {viewer_script}")
+                print(f"   ℹ️  --no-viewer 옵션으로 이 경고를 숨길 수 있습니다.")
+                print()
+        except Exception as e:
+            print(f"   ⚠️  Realtime Viewer 시작 실패: {e}")
+            print(f"   ℹ️  서버는 정상적으로 시작됩니다.")
+            print()
+
     # 서버 생성 및 실행
     server = UnifiedFaceAnalysisTCPServer(
         host=host,
@@ -1058,7 +1087,22 @@ def main():
         max_connections=max_connections
     )
 
-    server.run()
+    try:
+        server.run()
+    finally:
+        # Viewer 프로세스 정리
+        if viewer_process is not None:
+            try:
+                print("\n🖼️  Realtime Viewer 종료 중...")
+                viewer_process.terminate()
+                viewer_process.wait(timeout=5)
+                print("   ✅ Viewer 종료 완료")
+            except Exception as e:
+                print(f"   ⚠️  Viewer 종료 실패: {e}")
+                try:
+                    viewer_process.kill()
+                except:
+                    pass
 
 
 if __name__ == '__main__':
