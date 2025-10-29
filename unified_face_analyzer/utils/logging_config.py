@@ -53,11 +53,18 @@ def setup_logging(name: str = None) -> logging.Logger:
 
         log_file = log_dir / config.logging.file.filename
 
-        # 파일 핸들러 (RotatingFileHandler 사용)
-        file_handler = logging.handlers.RotatingFileHandler(
+        # 서버 시작 시 기존 로그 파일 삭제 (매번 새로 시작)
+        if log_file.exists():
+            try:
+                log_file.unlink()
+            except (PermissionError, OSError):
+                # 삭제 실패 시 무시 (기존 파일에 이어서 씀)
+                pass
+
+        # 단순 FileHandler 사용 (rotation 없음)
+        file_handler = logging.FileHandler(
             log_file,
-            maxBytes=config.logging.file.max_bytes,
-            backupCount=config.logging.file.backup_count,
+            mode='w',  # 쓰기 모드 (새로 생성)
             encoding='utf-8'
         )
         file_level = getattr(logging, config.logging.file.level.upper(), logging.DEBUG)

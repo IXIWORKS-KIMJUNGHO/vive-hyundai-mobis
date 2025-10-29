@@ -5,10 +5,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
+from pathlib import Path
+import os
 
 # from modules.bn import InPlaceABNSync as BatchNorm2d
 
 resnet18_url = 'https://download.pytorch.org/models/resnet18-5c106cde.pth'
+
+# 로컬 모델 저장 경로
+MODELS_DIR = Path(__file__).parent.parent.parent / 'data' / 'models'
+RESNET18_LOCAL_PATH = MODELS_DIR / 'resnet18-5c106cde.pth'
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -80,7 +86,19 @@ class Resnet18(nn.Module):
         return feat8, feat16, feat32
 
     def init_weight(self):
-        state_dict = modelzoo.load_url(resnet18_url)
+        # 로컬 파일이 있으면 로컬에서 로드, 없으면 다운로드 후 저장
+        if RESNET18_LOCAL_PATH.exists():
+            print(f"✅ 로컬 ResNet18 모델 로드: {RESNET18_LOCAL_PATH}")
+            state_dict = torch.load(RESNET18_LOCAL_PATH, map_location='cpu')
+        else:
+            print(f"📥 ResNet18 모델 다운로드 중... (최초 1회만)")
+            state_dict = modelzoo.load_url(resnet18_url)
+
+            # 다운로드한 모델을 로컬에 저장
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            torch.save(state_dict, RESNET18_LOCAL_PATH)
+            print(f"✅ 모델 저장 완료: {RESNET18_LOCAL_PATH}")
+
         self_state_dict = self.state_dict()
         for k, v in state_dict.items():
             if 'fc' in k: continue

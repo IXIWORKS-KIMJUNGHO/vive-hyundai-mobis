@@ -7,8 +7,12 @@ from PIL import Image
 import torch
 import numpy as np
 from utils import get_config, get_logger
+from pathlib import Path
 
 logger = get_logger(__name__)
+
+# 로컬 모델 저장 경로 (프로젝트 내부)
+MODELS_DIR = Path(__file__).parent.parent / 'data' / 'models' / 'clip-vit-base-patch32'
 
 class CLIPClassifier:
     def __init__(self, device):
@@ -16,8 +20,23 @@ class CLIPClassifier:
         self.device = device
         self.config = get_config()
         model_name = "openai/clip-vit-base-patch32"
-        self.model = CLIPModel.from_pretrained(model_name).to(self.device)
-        self.processor = CLIPProcessor.from_pretrained(model_name)
+
+        # 로컬 모델이 있으면 로컬에서 로드, 없으면 다운로드 후 저장
+        if MODELS_DIR.exists() and (MODELS_DIR / "config.json").exists():
+            logger.info(f"✅ 로컬 CLIP 모델 로드: {MODELS_DIR}")
+            self.model = CLIPModel.from_pretrained(MODELS_DIR).to(self.device)
+            self.processor = CLIPProcessor.from_pretrained(MODELS_DIR)
+        else:
+            logger.info("📥 CLIP 모델 다운로드 중... (최초 1회만, 약 600MB)")
+            self.model = CLIPModel.from_pretrained(model_name).to(self.device)
+            self.processor = CLIPProcessor.from_pretrained(model_name)
+
+            # 다운로드한 모델을 로컬에 저장
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            self.model.save_pretrained(MODELS_DIR)
+            self.processor.save_pretrained(MODELS_DIR)
+            logger.info(f"✅ 모델 저장 완료: {MODELS_DIR}")
+
         self.results = {}
 
     def classify(self, pil_img, face, landmarks):

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Controlled Dual Purpose Server
 - Port 5000: 명령 수신 및 JSON 전송
@@ -15,8 +16,10 @@ import numpy as np
 import time
 import struct
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import argparse
+import random
+import glob
 
 
 class ControlledJSONServer:
@@ -238,14 +241,21 @@ class ControlledY8Server:
     외부 명령으로 스트리밍 시작/중지 제어
     """
 
-    def __init__(self, port: int, image_path: str, fps: int = 30, width: int = 1280, height: int = 800):
+    def __init__(self, port: int, image_path: str, fps: int = 30, width: int = 1280, height: int = 800, random_mode: bool = False):
         self.port = port
         self.image_path = image_path
         self.fps = fps
         self.width = width
         self.height = height
+        self.random_mode = random_mode
+        self.image_files: List[str] = []
 
-        self.y8_data = self._load_and_convert_image()
+        # 랜덤 모드면 이미지 파일 목록 수집
+        if self.random_mode:
+            self._collect_image_files()
+            self.y8_data = self._load_random_image()
+        else:
+            self.y8_data = self._load_and_convert_image(self.image_path)
 
         self.server_socket: Optional[socket.socket] = None
         self.is_running = False
@@ -253,21 +263,54 @@ class ControlledY8Server:
         self.clients = []
         self.clients_lock = threading.Lock()
 
-        print(f"🎥 [Y8 Server] 초기화")
+        print(f"[Y8 Server] 초기화")
         print(f"   포트: {port}")
-        print(f"   이미지: {image_path}")
+        if self.random_mode:
+            print(f"   모드: 랜덤 이미지 선택")
+            print(f"   이미지 폴더: {image_path}")
+            print(f"   사용 가능한 이미지: {len(self.image_files)}개")
+        else:
+            print(f"   이미지: {image_path}")
         print(f"   해상도: {width}x{height}")
         print(f"   FPS: {fps}")
         print(f"   Y8 데이터 크기: {len(self.y8_data)} bytes")
 
-    def _load_and_convert_image(self) -> bytes:
-        """PNG → Y8 변환"""
-        if not Path(self.image_path).exists():
-            raise FileNotFoundError(f"이미지 파일을 찾을 수 없습니다: {self.image_path}")
+    def _collect_image_files(self):
+        """이미지 폴더에서 camera_*.png 파일 목록 수집"""
+        folder = Path(self.image_path)
+        if folder.is_file():
+            # 파일이 주어진 경우 해당 디렉토리에서 검색
+            folder = folder.parent
 
-        image = cv2.imread(self.image_path, cv2.IMREAD_GRAYSCALE)
+        # camera_*.png 패턴 검색
+        pattern = str(folder / "camera_*.png")
+        self.image_files = glob.glob(pattern)
+
+        if not self.image_files:
+            raise FileNotFoundError(f"카메라 이미지를 찾을 수 없습니다: {pattern}")
+
+        self.image_files.sort()  # 파일명 정렬
+        print(f"   [발견된 이미지 파일]")
+        for img in self.image_files:
+            print(f"      - {Path(img).name}")
+
+    def _load_random_image(self) -> bytes:
+        """랜덤으로 이미지 선택 후 Y8 변환"""
+        if not self.image_files:
+            raise ValueError("사용 가능한 이미지 파일이 없습니다")
+
+        selected = random.choice(self.image_files)
+        print(f"   [랜덤 선택] {Path(selected).name}")
+        return self._load_and_convert_image(selected)
+
+    def _load_and_convert_image(self, image_path: str) -> bytes:
+        """PNG → Y8 변환"""
+        if not Path(image_path).exists():
+            raise FileNotFoundError(f"이미지 파일을 찾을 수 없습니다: {image_path}")
+
+        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
         if image is None:
-            raise ValueError(f"이미지 로드 실패: {self.image_path}")
+            raise ValueError(f"이미지 로드 실패: {image_path}")
 
         if image.shape != (self.height, self.width):
             original_shape = image.shape
@@ -368,13 +411,36 @@ class ControlledY8Server:
 
             start_time = time.time()
 
+            # 랜덤 모드면 매 프레임마다 새 이미지 선택
+            if self.random_mode:
+                self.y8_data = self._load_random_image()
+
             # 모든 클라이언트에게 전송
             with self.clients_lock:
                 disconnected_clients = []
 
                 for client_socket, client_address in self.clients:
                     try:
-                        client_socket.sendall(self.y8_data)
+                        # 실제 IR 카메라처럼 데이터를 불규칙한 크기로 10번에 나눠서 전송 (헤더 없음)
+                        data_size = len(self.y8_data)
+
+                        # 불규칙한 청크 비율 (총합 100%)
+                        chunk_ratios = [0.12, 0.08, 0.15, 0.09, 0.11, 0.13, 0.07, 0.10, 0.09, 0.06]
+
+                        print(f"\n[Y8 Server] 프레임 {frame_number} 전송 시작 (총: {data_size:,} bytes)")
+
+                        start = 0
+                        for i, ratio in enumerate(chunk_ratios):
+                            if i == len(chunk_ratios) - 1:
+                                # 마지막 청크는 나머지 모두 포함 (반올림 오차 보정)
+                                end = data_size
+                            else:
+                                end = start + int(data_size * ratio)
+
+                            chunk = self.y8_data[start:end]
+                            print(f"   [전송] 청크 {i+1}/10: {len(chunk):,} bytes (누적: {end:,}/{data_size:,})")
+                            client_socket.sendall(chunk)
+                            start = end
                     except Exception as e:
                         print(f"❌ [Y8 Server] 클라이언트 전송 실패: {client_address} - {e}")
                         disconnected_clients.append((client_socket, client_address))
@@ -411,7 +477,8 @@ class ControlledDualServer:
         y8_port: int = 5001,
         fps: int = 30,
         width: int = 1280,
-        height: int = 800
+        height: int = 800,
+        random_mode: bool = False
     ):
         print("=" * 80)
         print("  Controlled Dual Purpose Server")
@@ -419,7 +486,7 @@ class ControlledDualServer:
         print()
 
         # Y8 서버 먼저 생성
-        self.y8_server = ControlledY8Server(y8_port, image_path, fps, width, height)
+        self.y8_server = ControlledY8Server(y8_port, image_path, fps, width, height, random_mode)
         print()
 
         # JSON 서버 생성 (Y8 서버 참조, 동일한 FPS 사용)
@@ -466,12 +533,13 @@ def main():
     """메인 함수"""
     parser = argparse.ArgumentParser(description='Controlled Dual Purpose Server')
     parser.add_argument('--json', type=str, default='result.json', help='JSON file path')
-    parser.add_argument('--image', type=str, default='camera_capture_20250513_185039.png', help='PNG image path')
+    parser.add_argument('--image', type=str, default='camera_capture_20250513_185039.png', help='PNG image path or folder')
     parser.add_argument('--control-port', type=int, default=5000, help='Control server port (default: 5000)')
     parser.add_argument('--y8-port', type=int, default=5001, help='Y8 server port (default: 5001)')
     parser.add_argument('--width', type=int, default=1280, help='Image width (default: 1280)')
     parser.add_argument('--height', type=int, default=800, help='Image height (default: 800)')
     parser.add_argument('--fps', type=int, default=30, help='Y8 streaming FPS (default: 30)')
+    parser.add_argument('--random', action='store_true', help='랜덤 이미지 모드 (camera_*.png 자동 선택)')
 
     args = parser.parse_args()
 
@@ -482,7 +550,8 @@ def main():
         y8_port=args.y8_port,
         fps=args.fps,
         width=args.width,
-        height=args.height
+        height=args.height,
+        random_mode=args.random
     )
 
     server.run()

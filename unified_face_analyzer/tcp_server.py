@@ -29,6 +29,8 @@ from PIL import Image
 import numpy as np
 import cv2
 import time
+import subprocess
+import sys
 
 from core.unified_analyzer import UnifiedFaceAnalyzer
 from utils import get_logger
@@ -93,6 +95,20 @@ class UnifiedFaceAnalysisTCPServer:
 
         self.server_socket: Optional[socket.socket] = None
         self.is_running = False
+
+        # 중복 메시지 필터링용
+        self.last_error_state = None
+
+        # 연결 및 데이터 수신 통계
+        self.connection_stats = {
+            'total_connections': 0,
+            'active_connections': 0,
+            'total_images_received': 0,
+            'total_bytes_received': 0,
+            'failed_receives': 0,
+            'last_receive_time': None,
+            'idle_duration': 0
+        }
 
         # UnifiedFaceAnalyzer 초기화
         print("🔧 UnifiedFaceAnalyzer 초기화 중...")
@@ -169,6 +185,77 @@ class UnifiedFaceAnalysisTCPServer:
 
         return 'unknown'
 
+    def _clear_stale_data(self, client_socket: socket.socket):
+        """
+        TCP 수신 버퍼에 남아있는 오래된 데이터 제거
+
+        Args:
+            client_socket: 클라이언트 소켓
+        """
+        client_socket.setblocking(False)
+        total_cleared = 0
+
+        try:
+            while True:
+                data = client_socket.recv(1048576)  # 최대 1MB씩
+                if not data:
+                    break
+                total_cleared += len(data)
+                print(f"🗑️  버퍼에서 오래된 데이터 제거: {len(data):,} bytes")
+        except BlockingIOError:
+            # 더 이상 받을 데이터가 없음 (정상)
+            pass
+        except Exception as e:
+            logger.warning(f"Error clearing stale data: {e}")
+        finally:
+            client_socket.setblocking(True)
+
+        if total_cleared > 0:
+            print(f"✅ 총 {total_cleared:,} bytes의 오래된 데이터 제거 완료")
+
+    def _recv_exactly(self, client_socket: socket.socket, size: int, timeout: float = 10.0) -> Optional[bytes]:
+        """
+        정확한 크기만큼 데이터 수신 (타임아웃 포함)
+
+        Args:
+            client_socket: 클라이언트 소켓
+            size: 수신할 정확한 바이트 수
+            timeout: 타임아웃 (초)
+
+        Returns:
+            수신한 데이터 또는 None
+        """
+        client_socket.settimeout(timeout)
+        data = b''
+
+        try:
+            while len(data) < size:
+                remaining = size - len(data)
+                chunk = client_socket.recv(min(remaining, 1048576))  # 최대 1MB씩
+
+                if not chunk:
+                    logger.error(f"Connection closed: received {len(data)}/{size} bytes")
+                    return None
+
+                data += chunk
+
+                # 진행 상황 출력 (10% 단위)
+                progress = len(data) / size * 100
+                if progress % 10 < (len(chunk) / size * 100):
+                    print(f"📦 수신 중: {len(data):,}/{size:,} bytes ({progress:.1f}%)")
+
+        except socket.timeout:
+            logger.error(f"Timeout: received {len(data)}/{size} bytes in {timeout}s")
+            print(f"⏱️  타임아웃: {len(data):,}/{size:,} bytes ({len(data)/size*100:.1f}%) - {timeout}초 경과")
+            return None
+        except Exception as e:
+            logger.error(f"Error receiving data: {e}")
+            return None
+        finally:
+            client_socket.settimeout(None)
+
+        return data
+
     def _decode_raw_y8(self, data: bytes, width: int = 1280, height: int = 800) -> Optional[np.ndarray]:
         """
         Raw Y8 데이터를 BGR 이미지로 변환
@@ -222,9 +309,9 @@ class UnifiedFaceAnalysisTCPServer:
         """
         클라이언트로부터 이미지 데이터 수신 (자동 형식 감지)
 
-        Protocol (No size header):
-        - 직접 raw 데이터 수신 (JPEG/PNG/Raw Y8)
-        - 첫 번째 청크에서 형식 자동 감지
+        Protocol:
+        - Raw Y8: "STRT" (4 bytes) + 1,024,000 bytes
+        - PNG/JPEG: 직접 데이터 수신 (매직 넘버로 감지)
 
         Args:
             client_socket: 클라이언트 소켓
@@ -234,43 +321,112 @@ class UnifiedFaceAnalysisTCPServer:
             numpy array (BGR 포맷) 또는 None
         """
         try:
-            # 1. 첫 번째 청크 수신 (형식 감지용)
-            logger.info(f"Waiting to receive image data (buffer_size: {buffer_size})...")
-            first_chunk = client_socket.recv(buffer_size)
+            # 1. 첫 4 bytes 수신 (프로토콜 감지)
+            logger.info(f"Waiting to receive image data...")
+            header = client_socket.recv(4)
 
-            if not first_chunk:
-                logger.warning("No data received")
+            if not header:
+                # 중복 메시지 필터링
+                if self.last_error_state != "no_data":
+                    logger.warning("No data received")
+                    print("⚠️  데이터 없음 - 대기 중...")
+                    self.last_error_state = "no_data"
                 return None
 
+            # 데이터 수신 성공 시 에러 상태 초기화
+            if self.last_error_state == "no_data":
+                print("✅ 데이터 수신 재개")
+                self.last_error_state = None
+
+            # 2. "STRT" 매직 넘버 확인
+            if header == b'STRT':
+                print("🎬 START 신호 감지 - Y8 이미지 수신 시작")
+                logger.info("START signal detected, receiving Y8 image")
+
+                # 오래된 데이터 제거 (START 신호 이후 깨끗한 상태)
+                print("🗑️  버퍼 정리 중...")
+                self._clear_stale_data(client_socket)
+
+                # 정확히 1,024,000 bytes 수신
+                image_data = self._recv_exactly(client_socket, 1024000, timeout=10.0)
+
+                if image_data is None:
+                    logger.error("Failed to receive Y8 data after START signal")
+                    return None
+
+                print(f"✅ Y8 데이터 완전 수신: 1,024,000 / 1,024,000 bytes (100%)")
+
+                # Y8 디코딩
+                image = self._decode_raw_y8(image_data)
+
+                if image is not None:
+                    logger.info(f"Y8 decoding successful: {image.shape}")
+                else:
+                    logger.error("Y8 decoding failed")
+
+                return image
+
+            # 3. PNG/JPEG 감지 (기존 방식)
+            # 나머지 데이터 수신하여 first_chunk 구성
+            remaining = client_socket.recv(buffer_size - 4)
+            first_chunk = header + remaining
+
+            if not first_chunk:
+                logger.warning("No data received after header")
+                return None
+
+            print(f"📦 데이터 수신됨: {len(first_chunk):,} bytes (첫 번째 청크)")
             logger.info(f"Received {len(first_chunk)} bytes")
 
             # 디버그: 첫 16 bytes hex dump
-            hex_preview = ' '.join(f'{b:02x}' for b in first_chunk[:16])
-            logger.info(f"First 16 bytes (hex): {hex_preview}")
+            preview_len = min(16, len(first_chunk))
+            if preview_len > 0:
+                hex_preview = ' '.join(f'{b:02x}' for b in first_chunk[:preview_len])
+                logger.info(f"First {preview_len} bytes (hex): {hex_preview}")
+            else:
+                logger.warning("Received empty data")
 
-            # 2. 이미지 형식 자동 감지
+            # 4. 이미지 형식 자동 감지
             image_format = self._detect_image_format(first_chunk)
             logger.info(f"Detected image format: {image_format}")
 
-            # 3. Raw Y8인 경우 정확한 크기로 수신
+            # 5. Raw Y8인 경우 (START 신호 없이 온 경우 - 레거시 지원)
             if image_format == 'raw_y8':
-                expected_size = len(first_chunk)
-                logger.info(f"Raw Y8 detected, received size: {expected_size}")
+                initial_size = len(first_chunk)
+                logger.info(f"Raw Y8 detected, initial received: {initial_size} bytes")
 
-                # 일반적인 Y8 크기 확인
-                if expected_size not in [1024000, 921600, 2073600]:
-                    # 크기가 정확하지 않으면 더 수신 필요
-                    logger.warning(f"Unexpected Y8 size: {expected_size}, trying to receive more")
+                # 1,024,000 bytes 정확히 수신 (타임아웃: 10초)
+                if initial_size == 1024000:
+                    # 이미 완전히 받음
                     image_data = first_chunk
-                    while len(image_data) < buffer_size:
-                        chunk = client_socket.recv(buffer_size - len(image_data))
-                        if not chunk:
-                            break
-                        image_data += chunk
-                    logger.info(f"After additional recv: {len(image_data)} bytes total")
+                    print(f"✅ Y8 데이터 완전 수신: {initial_size:,} / 1,024,000 bytes (100%)")
+                elif initial_size < 1024000:
+                    # 부족한 만큼 추가로 정확히 수신
+                    remaining = 1024000 - initial_size
+                    logger.warning(f"Incomplete Y8 data: {initial_size}/1024000, receiving {remaining} more bytes")
+                    print(f"⚠️  부분 수신: {initial_size:,} / 1,024,000 bytes - 나머지 {remaining:,} bytes 수신 시도")
+
+                    additional_data = self._recv_exactly(client_socket, remaining, timeout=10.0)
+
+                    if additional_data is None:
+                        logger.error("Failed to receive remaining Y8 data")
+                        # 타임아웃 발생 - 오래된 데이터 제거
+                        print("🗑️  타임아웃 발생 - 버퍼의 오래된 데이터 제거 중...")
+                        self._clear_stale_data(client_socket)
+                        return None
+
+                    image_data = first_chunk + additional_data
+                    print(f"✅ Y8 데이터 완전 수신: {len(image_data):,} / 1,024,000 bytes (100%)")
                 else:
-                    image_data = first_chunk
-                    logger.info(f"Y8 size is valid: {expected_size} bytes")
+                    # 너무 많이 받음 (다음 이미지와 섞임)
+                    logger.error(f"Received too much data: {initial_size} > 1024000")
+                    print(f"❌ 과다 수신: {initial_size:,} bytes (1,024,000 초과 {initial_size-1024000:,} bytes)")
+                    # 정확히 1,024,000만 사용
+                    image_data = first_chunk[:1024000]
+                    print(f"⚠️  첫 1,024,000 bytes만 사용, 나머지 {initial_size-1024000:,} bytes 버림")
+                    # 과다 수신 - 버퍼에 남은 데이터 제거
+                    print("🗑️  과다 수신 발생 - 버퍼의 나머지 데이터 제거 중...")
+                    self._clear_stale_data(client_socket)
 
                 # Raw Y8 디코딩
                 logger.info(f"Decoding Y8 data: {len(image_data)} bytes")
@@ -521,20 +677,55 @@ class UnifiedFaceAnalysisTCPServer:
             client_socket: 클라이언트 소켓
             client_address: 클라이언트 주소
         """
-        print(f"🔗 클라이언트 연결: {client_address[0]}:{client_address[1]}")
+        # 연결 통계 업데이트
+        self.connection_stats['total_connections'] += 1
+        self.connection_stats['active_connections'] += 1
+
+        print("=" * 80)
+        print(f"✅ 클라이언트 연결됨!")
+        print(f"   📍 주소: {client_address[0]}:{client_address[1]}")
+        print(f"   🕒 시간: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"   📊 총 연결 수: {self.connection_stats['total_connections']}")
+        print(f"   📊 활성 연결: {self.connection_stats['active_connections']}")
+        print("=" * 80)
         logger.info(f"Client connected: {client_address}")
+
+        # 연결 대기 시간 측정 시작
+        connection_start_time = time.time()
+        last_data_time = connection_start_time
 
         try:
             while self.is_running:
                 # 1. 이미지 수신
-                print(f"\n📥 이미지 수신 중...")
+                # "📥 이미지 수신 중..." 메시지는 receive_image 내부 로거에서 처리
                 image = self.receive_image(client_socket)
 
+                # 데이터 대기 시간 계산
+                current_time = time.time()
+                idle_time = current_time - last_data_time
+
                 if image is None:
-                    print("❌ 이미지 수신 실패")
-                    break
+                    # 중복 메시지는 receive_image()에서 필터링됨
+                    self.connection_stats['failed_receives'] += 1
+
+                    # 30초 이상 데이터 없으면 경고
+                    if idle_time > 30:
+                        print(f"⚠️  데이터 대기 시간: {idle_time:.1f}초 (30초 초과)")
+                        print(f"   💡 언리얼에서 이미지 전송이 제대로 되고 있는지 확인하세요.")
+
+                    # 연결은 유지하고 다음 프레임을 기다림
+                    continue
+
+                # 데이터 수신 성공
+                last_data_time = current_time
+                self.connection_stats['total_images_received'] += 1
+                self.connection_stats['total_bytes_received'] += image.size * image.itemsize
+                self.connection_stats['last_receive_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
 
                 print(f"✅ 이미지 수신 완료: {image.shape}")
+                print(f"   📊 총 수신: {self.connection_stats['total_images_received']}장 ({self.connection_stats['total_bytes_received']:,} bytes)")
+                if idle_time > 5:
+                    print(f"   ⏱️  이전 수신 후 경과: {idle_time:.1f}초")
 
                 # 2. 이미지 분석
                 print("🔍 얼굴 분석 중...")
@@ -598,8 +789,24 @@ class UnifiedFaceAnalysisTCPServer:
             print(f"❌ 클라이언트 처리 오류: {e}")
 
         finally:
+            # 연결 통계 업데이트
+            self.connection_stats['active_connections'] -= 1
+            session_duration = time.time() - connection_start_time
+
             client_socket.close()
-            print(f"🔌 클라이언트 연결 종료: {client_address[0]}:{client_address[1]}\n")
+            print("=" * 80)
+            print(f"🔌 클라이언트 연결 종료됨")
+            print(f"   📍 주소: {client_address[0]}:{client_address[1]}")
+            print(f"   🕒 종료 시간: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"   ⏱️  세션 시간: {session_duration:.1f}초")
+            print(f"   📊 이 세션 통계:")
+            print(f"      - 수신 이미지: {self.connection_stats['total_images_received']}장")
+            print(f"      - 실패 수신: {self.connection_stats['failed_receives']}회")
+            if self.connection_stats['total_images_received'] > 0:
+                avg_interval = session_duration / self.connection_stats['total_images_received']
+                print(f"      - 평균 수신 간격: {avg_interval:.2f}초")
+            print("=" * 80)
+            print()
             logger.info(f"Client disconnected: {client_address}")
 
     def run(self):
@@ -642,6 +849,111 @@ class UnifiedFaceAnalysisTCPServer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager 종료"""
         self.stop()
+
+
+def check_adb_port_forwarding(port: int) -> dict:
+    """
+    ADB 포트포워딩 상태 확인 (forward, reverse 양방향)
+
+    Args:
+        port: 확인할 포트 번호 (분석기 포트)
+
+    Returns:
+        검증 결과 딕셔너리 {
+            'adb_available': bool,
+            'forward_set': bool,
+            'reverse_set': bool,
+            'forward_info': str,
+            'reverse_info': str,
+            'warnings': list
+        }
+    """
+    result = {
+        'adb_available': False,
+        'forward_set': False,
+        'reverse_set': False,
+        'forward_info': None,
+        'reverse_info': None,
+        'warnings': []
+    }
+
+    apk_port = port + 1  # APK는 10001, 분석기는 10000
+
+    try:
+        # 1. ADB 설치 확인
+        try:
+            subprocess.run(['adb', 'version'],
+                         capture_output=True,
+                         timeout=5,
+                         check=True)
+            result['adb_available'] = True
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            result['warnings'].append("⚠️  ADB가 설치되어 있지 않거나 PATH에 없습니다.")
+            return result
+
+        # 2. forward 포트포워딩 확인 (APK → PC)
+        try:
+            adb_result = subprocess.run(
+                ['adb', 'forward', '--list'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if adb_result.returncode == 0:
+                forward_list = adb_result.stdout.strip()
+
+                # APK 포트 → 분석기 포트 매핑 확인
+                for line in forward_list.split('\n'):
+                    # 예: "emulator-5554 tcp:10001 tcp:10000"
+                    if f'tcp:{apk_port}' in line and f'tcp:{port}' in line:
+                        result['forward_set'] = True
+                        result['forward_info'] = line.strip()
+                        break
+
+        except subprocess.TimeoutExpired:
+            result['warnings'].append("⚠️  ADB forward 명령 타임아웃 (5초)")
+        except Exception as e:
+            result['warnings'].append(f"⚠️  ADB forward 확인 중 오류: {e}")
+
+        # 3. reverse 포트포워딩 확인 (PC → APK)
+        try:
+            adb_result = subprocess.run(
+                ['adb', 'reverse', '--list'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if adb_result.returncode == 0:
+                reverse_list = adb_result.stdout.strip()
+
+                # 분석기 포트 → APK 포트 매핑 확인
+                for line in reverse_list.split('\n'):
+                    # 예: "tcp:10000 tcp:10001"
+                    if f'tcp:{port}' in line and f'tcp:{apk_port}' in line:
+                        result['reverse_set'] = True
+                        result['reverse_info'] = line.strip()
+                        break
+
+        except subprocess.TimeoutExpired:
+            result['warnings'].append("⚠️  ADB reverse 명령 타임아웃 (5초)")
+        except Exception as e:
+            result['warnings'].append(f"⚠️  ADB reverse 확인 중 오류: {e}")
+
+        # 4. 설정 권장사항
+        if not result['forward_set']:
+            result['warnings'].append(f"⚠️  forward 설정 없음 (APK → 분석기)")
+            result['warnings'].append(f"   💡 adb forward tcp:{apk_port} tcp:{port}")
+
+        if not result['reverse_set']:
+            result['warnings'].append(f"⚠️  reverse 설정 없음 (분석기 → APK)")
+            result['warnings'].append(f"   💡 adb reverse tcp:{port} tcp:{apk_port}")
+
+    except Exception as e:
+        result['warnings'].append(f"⚠️  포트포워딩 확인 중 예외 발생: {e}")
+
+    return result
 
 
 def load_config(config_path: str = 'config.yaml') -> dict:
@@ -717,6 +1029,63 @@ def main():
     print(f"   Host: {host}")
     print(f"   Port: {port}")
     print(f"   Max Connections: {max_connections}")
+    print()
+
+    # ADB 포트포워딩 검증
+    print("🔍 ADB 포트포워딩 검증 중...")
+    port_check = check_adb_port_forwarding(port)
+
+    apk_port = port + 1
+
+    if port_check['adb_available']:
+        print(f"   ✅ ADB 설치 확인됨")
+        print()
+
+        # forward 포트포워딩 확인
+        if port_check['forward_set']:
+            print(f"   ✅ forward 설정 확인 (APK → 분석기)")
+            print(f"      {port_check['forward_info']}")
+        else:
+            print(f"   ⚠️  forward 설정 없음 (APK → 분석기)")
+            print(f"      💡 adb forward tcp:{apk_port} tcp:{port}")
+
+        print()
+
+        # reverse 포트포워딩 확인
+        if port_check['reverse_set']:
+            print(f"   ✅ reverse 설정 확인 (분석기 → APK)")
+            print(f"      {port_check['reverse_info']}")
+        else:
+            print(f"   ⚠️  reverse 설정 없음 (분석기 → APK)")
+            print(f"      💡 adb reverse tcp:{port} tcp:{apk_port}")
+
+        print()
+
+        # 종합 판정
+        if port_check['forward_set'] and port_check['reverse_set']:
+            print(f"   🎉 양방향 포트포워딩 모두 설정됨!")
+        elif port_check['forward_set']:
+            print(f"   ⚠️  forward만 설정됨. reverse도 설정하는 것을 권장합니다.")
+        elif port_check['reverse_set']:
+            print(f"   ⚠️  reverse만 설정됨. forward도 설정하는 것을 권장합니다.")
+        else:
+            print(f"   ⚠️  양방향 포트포워딩이 모두 설정되어 있지 않습니다.")
+            print(f"   💡 설정 방법:")
+            print(f"      adb forward tcp:{apk_port} tcp:{port}")
+            print(f"      adb reverse tcp:{port} tcp:{apk_port}")
+            print(f"   ℹ️  서버는 시작되지만, 안드로이드 기기에서 연결이 안 될 수 있습니다.")
+    else:
+        print(f"   ⚠️  ADB를 찾을 수 없습니다.")
+        print(f"   💡 안드로이드 기기와 연결하려면 ADB가 필요합니다.")
+        print(f"   ℹ️  로컬 네트워크에서는 포트포워딩 없이도 작동합니다.")
+
+    # 경고 메시지 출력
+    for warning in port_check['warnings']:
+        print(warning)
+
+    print()
+    print("=" * 80)
+    print()
 
     # 서버 생성 및 실행
     server = UnifiedFaceAnalysisTCPServer(
