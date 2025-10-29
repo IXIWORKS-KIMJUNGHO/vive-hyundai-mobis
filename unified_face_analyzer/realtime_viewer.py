@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Real-time Y8 Image Viewer
-TCP 서버로 들어오는 Y8 데이터를 실시간으로 표시
+Real-time Y8 Image Viewer - Android Style Buffer Processing
+TCP 서버로 들어오는 Y8 데이터를 실시간으로 표시 (Android 스타일 버퍼 처리)
 
 사용법:
     python realtime_viewer.py [--port PORT] [--width WIDTH] [--height HEIGHT]
@@ -20,10 +20,11 @@ import cv2
 import argparse
 from queue import Queue, Empty
 from pathlib import Path
+from datetime import datetime
 
 
 class RealtimeY8Viewer:
-    """실시간 Y8 이미지 뷰어"""
+    """실시간 Y8 이미지 뷰어 - Android 스타일 버퍼 처리"""
 
     def __init__(self, host='0.0.0.0', port=10000, width=1280, height=800):
         self.host = host
@@ -34,13 +35,17 @@ class RealtimeY8Viewer:
 
         self.server_socket = None
         self.is_running = False
-        self.image_queue = Queue(maxsize=5)  # 최대 5개 이미지 버퍼
+        self.image_queue = Queue(maxsize=5)
+
+        # Android 스타일 단일 버퍼 (재사용)
+        self._single_buffer = bytearray()
+        self._rgb_buffer = None  # 지연 초기화
 
         # 통계
         self.frames_received = 0
         self.last_frame_time = None
         self.fps = 0.0
-
+        self.last_error_state = None
     def start_server(self):
         """TCP 서버 시작"""
         try:
@@ -89,71 +94,191 @@ class RealtimeY8Viewer:
                 break
 
     def _handle_client(self, client_socket, client_address):
-        """클라이언트로부터 데이터 수신 및 크기 검증"""
+        """클라이언트로부터 데이터 수신 - Android 스타일"""
         try:
             while self.is_running:
-                # 첫 번째 청크 수신 (최대 1MB)
-                first_chunk = client_socket.recv(1024 * 1024)  # 1MB 버퍼
+                # Android의 processImageBuffer() 재현
+                success = self._receive_to_single_buffer(client_socket)
 
-                if not first_chunk:
-                    print(f"⚠️  데이터 수신 실패 또는 연결 종료")
+                if not success:
                     break
 
-                received_size = len(first_chunk)
-                print(f"📦 수신: {received_size:,} bytes", end='')
-
-                # 크기 검증 및 해상도 자동 감지
-                if received_size == self.expected_size:
-                    # 정확한 크기 (1280x800)
-                    image_data = first_chunk
-                    width, height = self.width, self.height
-                    print(" ✅")
-                elif received_size == 1048576:  # 1024x1024
-                    # 1024x1024 해상도
-                    print(f" ⚠️  다른 해상도 감지: 1024x1024")
-                    image_data = first_chunk
-                    width, height = 1024, 1024
-                elif received_size > self.expected_size:
-                    # 크기가 큼 - 처음 1,024,000만 사용
-                    print(f" ⚠️  과다 수신")
-                    print(f"   → 처음 {self.expected_size:,} bytes만 사용 (나머지 {received_size - self.expected_size:,} bytes 버림)")
-                    image_data = first_chunk[:self.expected_size]
-                    width, height = self.width, self.height
-                elif received_size < self.expected_size:
-                    # 크기가 작음 - 나머지 수신
-                    print(f" ⚠️  부분 수신")
-                    remaining = self.expected_size - received_size
-                    print(f"   → 나머지 {remaining:,} bytes 수신 중...")
-
-                    additional_data = self._recv_exactly(client_socket, remaining, timeout=5.0)
-
-                    if additional_data is None:
-                        print(f"   ❌ 나머지 데이터 수신 실패")
-                        continue
-
-                    image_data = first_chunk + additional_data
-                    width, height = self.width, self.height
-                    print(f"   ✅ 전체 수신 완료: {len(image_data):,} bytes")
-
-                # 이미지 처리 및 큐에 추가
-                bgr_image = self._process_y8_data(image_data, width, height)
-
-                if bgr_image is not None:
-                    # 큐가 가득 차면 오래된 프레임 버림
-                    if self.image_queue.full():
-                        try:
-                            self.image_queue.get_nowait()
-                        except Empty:
-                            pass
-
-                    self.image_queue.put(bgr_image)
-                    self._update_stats()
+                # 버퍼 처리 및 디스플레이
+                self._process_image_buffer_android_style()
 
         except Exception as e:
             print(f"❌ 클라이언트 처리 에러: {e}")
         finally:
             client_socket.close()
             print(f"🔌 클라이언트 연결 종료: {client_address[0]}:{client_address[1]}")
+
+    def _receive_to_single_buffer(self, client_socket):
+        """Android 스타일 단일 버퍼로 데이터 수신"""
+        try:
+            # 첫 번째 청크 수신 (최대 1MB)
+            first_chunk = client_socket.recv(1024 * 1024)
+
+            if not first_chunk:
+                if self.last_error_state != "no_data":
+                    print(f"⚠️  데이터 수신 실패 또는 연결 종료")
+                    self.last_error_state = "no_data"
+                return False
+
+            if self.last_error_state == "no_data":
+                print("✅ 데이터 수신 재개")
+                self.last_error_state = None
+
+            received_size = len(first_chunk)
+            print(f"📦 수신: {received_size:,} bytes", end='')
+
+            # 단일 버퍼 초기화 (Android의 resetBuffer())
+            self._single_buffer.clear()
+
+            # 크기 검증 및 해상도 자동 감지
+            if received_size == self.expected_size:
+                self._single_buffer.extend(first_chunk)
+                print(" ✅")
+                return True
+            elif received_size == 1048576:  # 1024x1024
+                print(f" ⚠️  다른 해상도 감지: 1024x1024")
+                self._single_buffer.extend(first_chunk)
+                self._temp_width = 1024
+                self._temp_height = 1024
+                return True
+            elif received_size > self.expected_size:
+                print(f" ⚠️  과다 수신")
+                print(f"   → 처음 {self.expected_size:,} bytes만 사용")
+                self._single_buffer.extend(first_chunk[:self.expected_size])
+                return True
+            elif received_size < self.expected_size:
+                print(f" ⚠️  부분 수신")
+                remaining = self.expected_size - received_size
+                print(f"   → 나머지 {remaining:,} bytes 수신 중...")
+
+                self._single_buffer.extend(first_chunk)
+                additional_data = self._recv_exactly(client_socket, remaining, timeout=5.0)
+
+                if additional_data is None:
+                    print(f"   ❌ 나머지 데이터 수신 실패")
+                    return False
+
+                self._single_buffer.extend(additional_data)
+                print(f"   ✅ 전체 수신 완료: {len(self._single_buffer):,} bytes")
+                return True
+
+        except Exception as e:
+            print(f"❌ 버퍼 수신 에러: {e}")
+            return False
+
+    def _process_image_buffer_android_style(self):
+        """Android의 processImageBuffer() 재현"""
+        try:
+            start_time = datetime.now()
+
+            # 해상도 결정
+            if hasattr(self, '_temp_width'):
+                width = self._temp_width
+                height = self._temp_height
+                delattr(self, '_temp_width')
+                delattr(self, '_temp_height')
+            else:
+                width = self.width
+                height = self.height
+
+            expected_total_size = width * height
+
+            if len(self._single_buffer) >= expected_total_size:
+                # Android의 toBitmap() 호출과 동일
+                bgr_image = self._convert_y8_to_texture_android_style(
+                    bytes(self._single_buffer[:expected_total_size]),
+                    width,
+                    height
+                )
+
+                if bgr_image is not None:
+                    self._display_texture(bgr_image)
+                    self._update_performance_stats(start_time)
+
+        except Exception as e:
+            print(f"❌ 이미지 버퍼 처리 에러: {e}")
+        finally:
+            # Android의 resetBuffer()
+            self._reset_buffer()
+
+    def _convert_y8_to_texture_android_style(self, data: bytes, width: int, height: int):
+        """Android 스타일 Y8 변환 (최대 성능) - Y축 뒤집기 적용"""
+        try:
+            # RGB 버퍼 초기화 (재사용)
+            if self._rgb_buffer is None or self._rgb_buffer.shape != (height, width, 3):
+                self._rgb_buffer = np.zeros((height, width, 3), dtype=np.uint8)
+
+            y8_array = np.frombuffer(data, dtype=np.uint8)
+            y8_image = y8_array.reshape((height, width))
+
+            # Y축을 뒤집어서 처리 (Android 스타일)
+            for y in range(height):
+                flipped_y = height - 1 - y
+                for x in range(width):
+                    gray_value = y8_image[y, x]
+                    self._rgb_buffer[flipped_y, x, 0] = gray_value  # R
+                    self._rgb_buffer[flipped_y, x, 1] = gray_value  # G
+                    self._rgb_buffer[flipped_y, x, 2] = gray_value  # B
+
+            bgr_image = cv2.cvtColor(self._rgb_buffer, cv2.COLOR_RGB2BGR)
+            return bgr_image
+
+        except Exception as e:
+            print(f"❌ Android 스타일 변환 에러: {e}")
+            return self._convert_y8_safe_fallback(data, width, height)
+
+    def _convert_y8_safe_fallback(self, data: bytes, width: int, height: int):
+        """안전한 폴백 방식 (numpy 기본 연산)"""
+        try:
+            if self._rgb_buffer is None or self._rgb_buffer.shape != (height, width, 3):
+                self._rgb_buffer = np.zeros((height, width, 3), dtype=np.uint8)
+
+            y8_array = np.frombuffer(data, dtype=np.uint8)
+            y8_image = y8_array.reshape((height, width))
+
+            y8_flipped = np.flipud(y8_image)
+            bgr_image = cv2.cvtColor(y8_flipped, cv2.COLOR_GRAY2BGR)
+
+            return bgr_image
+
+        except Exception as e:
+            print(f"❌ 폴백 변환 에러: {e}")
+            return None
+
+    def _display_texture(self, bgr_image: np.ndarray):
+        """이미지를 디스플레이 큐에 추가"""
+        if self.image_queue.full():
+            try:
+                self.image_queue.get_nowait()
+            except Empty:
+                pass
+
+        self.image_queue.put(bgr_image)
+
+    def _update_performance_stats(self, start_time: datetime):
+        """성능 통계 업데이트"""
+        self.frames_received += 1
+        current_time = time.time()
+
+        if self.last_frame_time is not None:
+            interval = current_time - self.last_frame_time
+            if interval > 0:
+                self.fps = 1.0 / interval
+
+        self.last_frame_time = current_time
+
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        if self.frames_received % 10 == 0:
+            print(f"📊 프레임: {self.frames_received}, FPS: {self.fps:.1f}, 처리: {processing_time:.1f}ms")
+
+    def _reset_buffer(self):
+        """Android의 resetBuffer() - 버퍼 초기화"""
+        self._single_buffer.clear()
 
     def _recv_exactly(self, sock, size, timeout=10.0):
         """정확히 size 바이트 수신"""
@@ -309,7 +434,7 @@ class RealtimeY8Viewer:
 
 def main():
     """메인 함수"""
-    parser = argparse.ArgumentParser(description='Real-time Y8 Image Viewer')
+    parser = argparse.ArgumentParser(description='Real-time Y8 Image Viewer - Android Style')
     parser.add_argument('--host', default='0.0.0.0', help='Server host (default: 0.0.0.0)')
     parser.add_argument('--port', type=int, default=10000, help='Server port (default: 10000)')
     parser.add_argument('--width', type=int, default=1280, help='Image width (default: 1280)')
@@ -318,7 +443,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 80)
-    print("  Real-time Y8 Image Viewer")
+    print("  Real-time Y8 Image Viewer - Android Style Buffer Processing")
     print("=" * 80)
     print()
 
