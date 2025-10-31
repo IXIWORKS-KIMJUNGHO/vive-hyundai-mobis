@@ -75,3 +75,13 @@ results/*
 !results/.gitkeep
 logs/*
 !logs/.gitkeep
+
+# Model files (large binary files)
+unified_face_analyzer/data/models/
+
+# Temporary test files
+sample_ir_server/*.png
+sample_ir_server/*.jpg
+sample_ir_server/nul
+unified_face_analyzer/nul
+nul

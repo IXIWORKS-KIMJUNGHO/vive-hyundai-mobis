@@ -8,6 +8,17 @@ Controlled Dual Purpose Server
 - Port 5001: Raw Y8 데이터 스트리밍 (제어됨)
 """
 
+import sys
+import io
+
+# Windows 콘솔 UTF-8 설정 (이모지 지원)
+if sys.platform == 'win32':
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    except:
+        pass
+
 import socket
 import threading
 import json
@@ -386,6 +397,7 @@ class ControlledY8Server:
                 # 클라이언트 소켓 최적화
                 client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2 * 1024 * 1024)  # 2MB 송신 버퍼
+                client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 2 * 1024 * 1024)  # 2MB 수신 버퍼
 
                 with self.clients_lock:
                     self.clients.append((client_socket, client_address))
@@ -441,23 +453,24 @@ class ControlledY8Server:
                                 self.y8_data = self.y8_data + b'\x00' * padding_size
                                 data_size = expected_size
 
-                        # 실제 IR 카메라처럼 데이터를 불규칙한 크기로 10번에 나눠서 전송 (헤더 없음)
-                        # 불규칙한 청크 비율 (총합 100%)
-                        chunk_ratios = [0.12, 0.08, 0.15, 0.09, 0.11, 0.13, 0.07, 0.10, 0.09, 0.06]
+                        # ⚠️  개선: 작은 chunk (65KB)로 blocking 방지
+                        CHUNK_SIZE = 65536  # 65KB - 수신측과 동일
 
-                        print(f"\n[Y8 Server] 프레임 {frame_number} 전송 시작 (총: {data_size:,} bytes)")
+                        print(f"\n[Y8 Server] 프레임 {frame_number} 전송 시작 (총: {data_size:,} bytes, chunk: {CHUNK_SIZE:,} bytes)")
 
                         start = 0
-                        for i, ratio in enumerate(chunk_ratios):
-                            if i == len(chunk_ratios) - 1:
-                                # 마지막 청크는 나머지 모두 포함 (반올림 오차 보정)
-                                end = data_size
-                            else:
-                                end = start + int(data_size * ratio)
-
+                        chunk_num = 0
+                        while start < data_size:
+                            end = min(start + CHUNK_SIZE, data_size)
                             chunk = self.y8_data[start:end]
-                            print(f"   [전송] 청크 {i+1}/10: {len(chunk):,} bytes (누적: {end:,}/{data_size:,})")
+                            chunk_num += 1
+
+                            print(f"   [전송] 청크 {chunk_num}: {len(chunk):,} bytes (누적: {end:,}/{data_size:,})")
                             client_socket.sendall(chunk)
+
+                            # 작은 delay로 수신측이 처리할 시간 제공
+                            time.sleep(0.001)  # 1ms delay
+
                             start = end
                     except Exception as e:
                         print(f"❌ [Y8 Server] 클라이언트 전송 실패: {client_address} - {e}")
@@ -551,7 +564,7 @@ def main():
     """메인 함수"""
     parser = argparse.ArgumentParser(description='Controlled Dual Purpose Server')
     parser.add_argument('--json', type=str, default='result.json', help='JSON file path')
-    parser.add_argument('--image', type=str, default='camera_capture_20250513_185039.png', help='PNG image path or folder')
+    parser.add_argument('--image', type=str, default='camera_capture_20250513_180114.png', help='PNG image path or folder')
     parser.add_argument('--control-port', type=int, default=5000, help='Control server port (default: 5000)')
     parser.add_argument('--y8-port', type=int, default=5001, help='Y8 server port (default: 5001)')
     parser.add_argument('--width', type=int, default=1280, help='Image width (default: 1280)')

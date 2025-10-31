@@ -349,6 +349,110 @@ class HairstyleAnalyzer:
             logger.error(f"Analysis Error: {e}", exc_info=True)
             return {'error': str(e)}, None
 
+    def analyze(self, bgr_image: np.ndarray):
+        """
+        BGR numpy array를 직접 분석 (TCP 서버용)
+
+        Args:
+            bgr_image: BGR numpy array (1280x800x3)
+
+        Returns:
+            분석 결과 딕셔너리 (analyze_image와 동일 형식, 단 viz_image 제외)
+        """
+        try:
+            logger.info("Analyzing BGR image (TCP server mode)")
+
+            img = bgr_image.copy()
+            if img is None or img.size == 0:
+                raise ValueError("Invalid BGR image")
+
+            img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+            # BGR → RGB → PIL
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(img_rgb)
+
+            # MediaPipe 얼굴 검출 (dlib 대체)
+            faces = self.face_detector(img_gray, 1)
+            if not faces:
+                raise ValueError("No face detected by MediaPipe.")
+            face = max(faces, key=lambda rect: rect.width() * rect.height())
+
+            # MediaPipe 68점 랜드마크 추출 (dlib 대체)
+            landmarks = self.shape_predictor(img_gray, face)
+            if landmarks is None:
+                raise ValueError("Failed to extract facial landmarks.")
+
+            # Stage 1: BiSeNet 세그멘테이션
+            logger.info("[Stage 1] Running BiSeNet segmentation...")
+            person_silhouette = self.run_segmentation(pil_img)
+
+            # CLIP으로 성별, 안경, 수염 검출 (성별 우선 판정)
+            clip_additional = self.clip_classifier.classify_accessories_only(pil_img, face, landmarks)
+
+            analysis_data = {}
+            analysis_data['face_rect'] = face
+            analysis_data['landmarks'] = landmarks
+            analysis_data['clean_silhouette'] = person_silhouette
+            analysis_data['hair_mask'] = self.hair_only_mask
+
+            final_classification = "Unknown"
+
+            # 성별에 따라 분석 경로 분기
+            if clip_additional['gender'] == 'Female':
+                # 여성: 헤어 길이만 분석
+                logger.info("[Female Detected] Analyzing hair length only...")
+                geo_analyzer = GeometricAnalyzer()
+                final_classification = geo_analyzer.analyze_hair_length(face, landmarks, self.hair_only_mask)
+            else:
+                # 남성: Bangs 검출 → Geometric Analysis
+                logger.info("[Male Detected] Performing bangs detection and geometric analysis...")
+                has_bangs = self._detect_bangs_with_bisenet(face, landmarks)
+
+                if has_bangs:
+                    final_classification = "Bangs"
+                else:
+                    # No Bangs - Geometric Analysis
+                    logger.info("[Stage 2] No bangs detected, proceeding to geometric analysis...")
+                    geo_analyzer = GeometricAnalyzer()
+                    final_classification, geo_data = geo_analyzer.analyze(
+                        img_gray, face, landmarks, person_silhouette, self.hair_only_mask, self.eyebrow_mask
+                    )
+                    analysis_data.update(geo_data)
+
+            result = {
+                'classification': final_classification,
+                'data': analysis_data,
+                'clip_results': {
+                    'bangs': 'No Bangs' if clip_additional['gender'] == 'Female' else ('Bangs' if has_bangs else 'No Bangs'),
+                    'bangs_confidence': 1.0,
+                    'glasses': clip_additional['glasses'],
+                    'glasses_confidence': clip_additional['glasses_confidence'],
+                    'beard': clip_additional['beard'],
+                    'beard_confidence': clip_additional['beard_confidence'],
+                    'gender': clip_additional['gender'],
+                    'gender_confidence': clip_additional['gender_confidence']
+                },
+                'gender_analysis': {
+                    'gender': clip_additional['gender'],
+                    'confidence': clip_additional['gender_confidence']
+                },
+                'glasses_analysis': {
+                    'has_glasses': clip_additional['glasses'] != 'No Glasses',
+                    'confidence': clip_additional['glasses_confidence']
+                },
+                'beard_analysis': {
+                    'has_beard': clip_additional['beard'] != 'No Beard',
+                    'confidence': clip_additional['beard_confidence']
+                }
+            }
+
+            return result
+
+        except Exception as e:
+            logger.error(f"BGR Analysis Error: {e}", exc_info=True)
+            return {'error': str(e)}
+
     def visualize_results(self, image, analysis_data, final_classification):
         """
         상세한 6분할 시각화 패널을 생성하는 완전한 함수입니다.

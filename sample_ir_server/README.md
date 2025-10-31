@@ -38,7 +38,7 @@ pip install opencv-python numpy
 
 ## 사용 방법
 
-### A. dual_server.py (추천)
+### A. controlled_dual_server.py (추천 - 제어 가능)
 
 #### 1. 파일 준비
 
@@ -46,29 +46,40 @@ pip install opencv-python numpy
 sample_ir_server/
   ├── result.json (샘플 제공됨)
   ├── camera_capture_20250513_185039.png (샘플 제공됨)
-  ├── dual_server.py
+  ├── camera_capture_*.png (여러 이미지)
+  ├── controlled_dual_server.py
   └── test_dual_client.py
 ```
 
 #### 2. 서버 실행
 
 ```bash
-# 기본 사용 (샘플 파일 사용)
-python dual_server.py
+# 기본 사용 (1개 이미지 고정)
+python controlled_dual_server.py
 
-# 커스텀 파일 사용
-python dual_server.py --json your_result.json --image your_image.png
+# 랜덤 이미지 모드 (camera_*.png 자동 선택)
+python controlled_dual_server.py --random
+
+# 특정 폴더의 랜덤 이미지
+python controlled_dual_server.py --image ./images --random
 
 # 포트 및 옵션 변경
-python dual_server.py \
+python controlled_dual_server.py \
   --json result.json \
   --image camera_capture.png \
-  --json-port 5000 \
+  --control-port 5000 \
   --y8-port 5001 \
   --width 1280 \
   --height 800 \
-  --fps 30
+  --fps 30 \
+  --random
 ```
+
+**랜덤 모드 특징:**
+- `--random` 플래그를 추가하면 매 프레임마다 다른 이미지를 랜덤으로 선택
+- `camera_*.png` 패턴의 모든 이미지 파일을 자동으로 검색
+- 10개의 카메라 캡처 이미지가 있으면 랜덤하게 순환
+- 실제 다양한 사람의 얼굴 데이터 테스트에 유용
 
 #### 3. 테스트 클라이언트 실행
 
