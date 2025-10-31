@@ -7,9 +7,17 @@ unified_analysis:
 
 server:
   host: "0.0.0.0"         # 모든 인터페이스에서 수신 (권장)
-  port: 10000             # TCP 포트 번호
+
+  # Port Configuration
+  ir_camera_port: 5001    # IR 카메라 이미지 수신 포트
+  viewer_port: 7001       # Realtime viewer 브로드캐스트 포트
+  analyze_port: 10000     # 얼굴 분석 요청 포트 (기본 포트)
+
   max_connections: 5      # 최대 동시 연결 수
   mode: 1                 # 0=Debug (start 명령으로 샘플 이미지), 1=Production (Raw 이미지 데이터 수신)
+
+  # Image Buffer Settings
+  image_buffer_size: 5    # 순환 버퍼 크기 (최대 저장 이미지 수)
 
 # 개발/프로덕션 환경별 설정
 environments:
@@ -28,13 +36,13 @@ environments:
 
 # 로깅 설정
 logging:
-  level: "INFO"
+  level: "WARNING"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   date_format: "%Y-%m-%d %H:%M:%S"
 
   console:
     enabled: true
-    level: "INFO"
+    level: "WARNING"
 
   file:
     enabled: true
@@ -111,3 +119,4 @@ geometric:
     sidepart_coverage_max: 0.50
     sidepart_symmetry_min: 0.35
   long_hair_bottom_threshold: 0.92
+

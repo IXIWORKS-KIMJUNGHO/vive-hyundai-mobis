@@ -56,6 +56,85 @@ class UnifiedFaceAnalyzer:
 
         logger.info("UnifiedFaceAnalyzer initialized successfully")
 
+    def analyze(self, bgr_image: np.ndarray) -> Dict[str, Any]:
+        """
+        BGR 이미지 분석 (TCP 서버용)
+
+        Args:
+            bgr_image: BGR numpy array (1280x800x3)
+
+        Returns:
+            통합 분석 결과 딕셔너리 (analyze_image와 동일 형식)
+        """
+        start_time = time.time()
+
+        result = {
+            'success': False,
+            'face_detected': False,
+            'metadata': {
+                'total_processing_time_ms': 0,
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'enabled_modules': []
+            }
+        }
+
+        # MediaPipe 분석
+        mediapipe_result = None
+        if self.mediapipe_detector and self.unified_config.enable_mediapipe:
+            try:
+                mediapipe_result = self._analyze_with_mediapipe(bgr_image)
+                result['mediapipe'] = mediapipe_result
+                result['metadata']['enabled_modules'].append('MediaPipe')
+
+                if mediapipe_result.get('success'):
+                    result['face_detected'] = True
+            except Exception as e:
+                logger.error(f"MediaPipe analysis failed: {e}")
+                result['mediapipe'] = {'success': False, 'error': str(e)}
+
+        # Hairstyle 분석
+        if self.hairstyle_analyzer and self.unified_config.enable_hairstyle and result['face_detected']:
+            try:
+                hairstyle_result = self.hairstyle_analyzer.analyze(bgr_image)
+                result['hairstyle'] = hairstyle_result.get('classification', 'Unknown')
+                result['metadata']['enabled_modules'].append('Hairstyle')
+
+                # CLIP 결과 추가
+                if 'clip_results' in hairstyle_result:
+                    clip = hairstyle_result['clip_results']
+                    result['gender'] = clip.get('gender', 'Unknown')
+                    result['glasses'] = clip.get('glasses', 'None')
+                    result['beard'] = clip.get('beard', 'None')
+
+                # MediaPipe face_analysis 결과 추가 (eye_shape, face_shape)
+                if mediapipe_result and mediapipe_result.get('success'):
+                    result['mediapipe_results'] = {}
+
+                    # face_analysis 섹션 생성
+                    face_analysis = {}
+
+                    # eye_analysis 추가
+                    if 'eye_analysis' in mediapipe_result:
+                        face_analysis['eye_analysis'] = mediapipe_result['eye_analysis']
+
+                    # face_shape_analysis 추가
+                    if 'face_shape_analysis' in mediapipe_result:
+                        face_analysis['face_shape_analysis'] = mediapipe_result['face_shape_analysis']
+
+                    if face_analysis:
+                        result['mediapipe_results']['face_analysis'] = face_analysis
+
+            except Exception as e:
+                logger.error(f"Hairstyle analysis failed: {e}")
+
+        # 성공 플래그
+        result['success'] = result['face_detected']
+
+        # 처리 시간
+        result['metadata']['total_processing_time_ms'] = round((time.time() - start_time) * 1000, 2)
+
+        return result
+
     def analyze_image(self, image_path: str) -> Dict[str, Any]:
         """
         통합 이미지 분석
