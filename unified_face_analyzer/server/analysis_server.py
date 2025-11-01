@@ -276,13 +276,23 @@ class AnalysisServer(BaseTCPServer):
 
         # Glasses 변환 (0=미착용, 1=착용)
         glasses_str = result.get('glasses', 'None')
-        tcp_result['has_glasses'] = 1 if glasses_str in ['Glasses', 'Sunglasses'] else 0
-        tcp_result['glasses_confidence'] = 0.75
+        tcp_result['has_glasses'] = 1 if glasses_str == 'Wearing Glasses' else 0
+
+        # CLIP confidence 가져오기
+        if 'hairstyle' in result and 'clip_results' in result['hairstyle']:
+            tcp_result['glasses_confidence'] = result['hairstyle']['clip_results'].get('glasses_confidence', 0.0)
+        else:
+            tcp_result['glasses_confidence'] = 0.0
 
         # Beard 변환 (0=없음, 1=있음)
         beard_str = result.get('beard', 'None')
-        tcp_result['has_beard'] = 1 if beard_str == 'Beard' else 0
-        tcp_result['beard_confidence'] = 0.80
+        tcp_result['has_beard'] = 1 if beard_str == 'With Beard' else 0
+
+        # CLIP confidence 가져오기
+        if 'hairstyle' in result and 'clip_results' in result['hairstyle']:
+            tcp_result['beard_confidence'] = result['hairstyle']['clip_results'].get('beard_confidence', 0.0)
+        else:
+            tcp_result['beard_confidence'] = 0.0
 
         # Face Shape 변환 (MediaPipe 결과에서 가져오기)
         if 'mediapipe_results' in result and 'face_analysis' in result['mediapipe_results']:
