@@ -15,7 +15,7 @@ python --version >nul 2>&1
 if errorlevel 1 (
     echo ❌ Python이 설치되어 있지 않습니다!
     echo.
-    echo 💡 Python 3.9, 3.10, 또는 3.11을 설치해주세요.
+    echo 💡 Python 3.9 ~ 3.12를 설치해주세요.
     echo    다운로드: https://www.python.org/downloads/
     echo.
     pause
@@ -26,11 +26,11 @@ for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
 echo ✅ Python %PYTHON_VERSION% 감지됨
 echo.
 
-REM Python 3.12+ 경고
-echo %PYTHON_VERSION% | findstr /R "3\.1[2-9]\." >nul
+REM Python 3.13+ 경고 (3.9-3.12 지원)
+echo %PYTHON_VERSION% | findstr /R "3\.1[3-9]\." >nul
 if not errorlevel 1 (
     echo ⚠️  경고: Python %PYTHON_VERSION%가 감지되었습니다.
-    echo    권장 버전: Python 3.9, 3.10, 3.11
+    echo    권장 버전: Python 3.9 ~ 3.12
     echo    일부 라이브러리가 호환되지 않을 수 있습니다.
     echo.
     choice /C YN /M "계속 진행하시겠습니까? (Y/N)"
