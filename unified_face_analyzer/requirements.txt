@@ -1,21 +1,62 @@
-# Core ML/CV Libraries
-torch>=2.0.0
-torchvision>=0.15.0
-opencv-python>=4.8.0
-numpy>=1.24.0
-Pillow>=10.0.0
+# ============================================================================
+# Unified Face Analyzer - Complete Dependencies
+# Python 3.9-3.11 호환
+# ============================================================================
 
-# Face Analysis
-mediapipe>=0.10.0        # MediaPipe 468-point landmark detection (replaces dlib)
+# Core ML/DL Frameworks
+torch>=2.0.0,<2.3.0              # PyTorch (CUDA 지원)
+torchvision>=0.15.0,<0.18.0      # Vision models and transforms
+torchaudio>=2.0.0,<2.3.0         # Audio processing (torch 의존성)
 
-# CLIP (for gender, glasses, beard classification)
-git+https://github.com/openai/CLIP.git
+# Computer Vision
+opencv-python>=4.8.0,<4.11.0     # OpenCV (이미지 처리, 디코딩)
+numpy>=1.24.0,<2.0.0             # 배열 연산
+Pillow>=10.0.0,<11.0.0           # 이미지 I/O
 
-# Transformers (for CLIP model loading)
-transformers>=4.30.0
+# Face Detection & Analysis
+mediapipe>=0.10.0,<0.11.0        # MediaPipe 468-point landmarks (dlib 대체)
 
-# GUI (optional)
-tkinterdnd2-universal>=0.3.0
+# CLIP Model (Gender, Glasses, Beard Classification)
+transformers>=4.30.0,<4.45.0     # HuggingFace Transformers (CLIP 로딩)
+sentencepiece>=0.1.99            # Tokenizer dependency
+protobuf>=3.20.0,<4.0.0          # Protocol buffers (transformers 의존성)
 
 # Configuration & Utilities
-pyyaml>=6.0
+pyyaml>=6.0,<7.0                 # YAML 설정 파일 파싱
+
+# GUI (Optional - UI app.py 사용 시 필요)
+tkinterdnd2>=0.3.0               # Drag & Drop 지원 Tkinter
+
+# Development & Testing (Optional)
+pytest>=7.0.0                    # 테스트 프레임워크
+pytest-cov>=4.0.0                # 커버리지 측정
+
+# ============================================================================
+# 설치 방법:
+# 1. 가상환경 생성 (권장):
+#    python -m venv venv
+#    source venv/bin/activate  (Linux/Mac)
+#    venv\Scripts\activate     (Windows)
+#
+# 2. 의존성 설치:
+#    pip install -r requirements.txt
+#
+# 3. GPU 지원 (CUDA):
+#    - CUDA 11.8: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#    - CUDA 12.1: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+# 4. CPU 전용:
+#    - pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# ============================================================================
+
+# ============================================================================
+# 모델 파일 (별도 다운로드 필요):
+# 1. BiSeNet (헤어 세그먼테이션):
+#    - 파일: data/79999_iter.pth (169MB)
+#    - 다운로드: https://github.com/zllrunning/face-parsing.PyTorch
+#
+# 2. CLIP (자동 다운로드):
+#    - 모델: openai/clip-vit-base-patch32 (약 600MB)
+#    - 저장 위치: data/models/clip-vit-base-patch32/
+#    - 첫 실행 시 자동 다운로드됨
+# ============================================================================
