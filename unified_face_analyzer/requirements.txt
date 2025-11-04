@@ -4,28 +4,40 @@
 # ============================================================================
 
 # Core ML/DL Frameworks
-torch>=2.0.0,<2.3.0              # PyTorch (CUDA 지원)
-torchvision>=0.15.0,<0.18.0      # Vision models and transforms
-torchaudio>=2.0.0,<2.3.0         # Audio processing (torch 의존성)
+torch>=2.0.0,<3.0.0              # PyTorch (CUDA 지원) - 현재: 2.9.0
+torchvision>=0.15.0,<1.0.0       # Vision models and transforms - 현재: 0.24.0
+# torchaudio>=2.0.0,<3.0.0       # Audio processing (선택사항, 미사용)
 
 # Computer Vision
-opencv-python>=4.8.0,<4.11.0     # OpenCV (이미지 처리, 디코딩)
-numpy>=1.24.0,<2.0.0             # 배열 연산
-Pillow>=10.0.0,<11.0.0           # 이미지 I/O
+opencv-python>=4.8.0,<5.0.0      # OpenCV (이미지 처리, 디코딩) - 현재: 4.12.0.88
+numpy>=1.24.0,<3.0.0             # 배열 연산 - 현재: 2.2.6
+Pillow>=10.0.0,<13.0.0           # 이미지 I/O - 현재: 12.0.0
 
 # Face Detection & Analysis
-mediapipe>=0.10.14,<0.11.0       # MediaPipe 468-point landmarks (dlib 대체, protobuf 4.x 호환)
+mediapipe>=0.10.14,<0.11.0       # MediaPipe 468-point landmarks (dlib 대체, protobuf 4.x 호환) - 현재: 0.10.14
+dlib>=19.24.0                    # Face recognition library (선택사항, 레거시 지원) - 현재: 20.0.0
 
 # CLIP Model (Gender, Glasses, Beard Classification)
-transformers>=4.30.0,<4.45.0     # HuggingFace Transformers (CLIP 로딩)
-sentencepiece>=0.1.99            # Tokenizer dependency
-protobuf>=4.25.3,<5.0.0          # Protocol buffers (mediapipe 0.10.14+, transformers 호환)
+transformers>=4.30.0,<5.0.0      # HuggingFace Transformers (CLIP 로딩) - 현재: 4.57.1
+tokenizers>=0.13.0,<1.0.0        # Fast tokenizers - 현재: 0.22.1
+safetensors>=0.3.0,<1.0.0        # Safe tensor storage - 현재: 0.6.2
+huggingface-hub>=0.16.0,<1.0.0   # Model hub client - 현재: 0.36.0
+regex>=2023.0.0                  # Regular expressions for tokenizers - 현재: 2025.10.23
+ftfy>=6.0.0                      # Text fixing for CLIP - 현재: 6.3.1
+protobuf>=4.25.3,<5.0.0          # Protocol buffers (mediapipe 0.10.14+, transformers 호환) - 현재: 4.25.8
 
 # Configuration & Utilities
-pyyaml>=6.0,<7.0                 # YAML 설정 파일 파싱
+pyyaml>=6.0,<7.0                 # YAML 설정 파일 파싱 - 현재: 6.0.3
+requests>=2.31.0,<3.0.0          # HTTP requests - 현재: 2.32.5
+tqdm>=4.65.0,<5.0.0              # Progress bars - 현재: 4.67.1
+filelock>=3.12.0,<4.0.0          # File locking utility - 현재: 3.20.0
 
 # GUI (Optional - UI app.py 사용 시 필요)
-tkinterdnd2>=0.3.0               # Drag & Drop 지원 Tkinter
+tkinterdnd2-universal>=1.7.0     # Drag & Drop 지원 Tkinter (universal 버전) - 현재: 1.7.3
+matplotlib>=3.7.0,<4.0.0         # Plotting library (선택사항) - 현재: 3.10.7
+
+# Scientific Computing (Optional)
+scipy>=1.10.0,<2.0.0             # Scientific computing (선택사항) - 현재: 1.16.2
 
 # Development & Testing (Optional)
 pytest>=7.0.0                    # 테스트 프레임워크
