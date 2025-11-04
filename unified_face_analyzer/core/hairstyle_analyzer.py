@@ -49,7 +49,16 @@ class HairstyleAnalyzer:
             raise FileNotFoundError(f"BiSeNet model not found at '{bisenet_model_path}'.")
 
         self.seg_model = BiSeNet(n_classes=self.config.bisenet.n_classes)
-        self.seg_model.load_state_dict(torch.load(bisenet_model_path, map_location=self.device))
+
+        # PyTorch 버전 호환성을 위한 안전한 모델 로딩
+        try:
+            # PyTorch 2.0+ 호환 로딩 (weights_only=False로 레거시 모델 지원)
+            state_dict = torch.load(bisenet_model_path, map_location=self.device, weights_only=False)
+        except TypeError:
+            # PyTorch 1.x 호환 로딩
+            state_dict = torch.load(bisenet_model_path, map_location=self.device)
+
+        self.seg_model.load_state_dict(state_dict)
         self.seg_model.to(self.device)
         self.seg_model.eval()
 

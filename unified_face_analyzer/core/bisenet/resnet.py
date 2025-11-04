@@ -89,7 +89,11 @@ class Resnet18(nn.Module):
         # 로컬 파일이 있으면 로컬에서 로드, 없으면 다운로드 후 저장
         if RESNET18_LOCAL_PATH.exists():
             print(f"✅ 로컬 ResNet18 모델 로드: {RESNET18_LOCAL_PATH}")
-            state_dict = torch.load(RESNET18_LOCAL_PATH, map_location='cpu')
+            # PyTorch 버전 호환성을 위한 안전한 로딩
+            try:
+                state_dict = torch.load(RESNET18_LOCAL_PATH, map_location='cpu', weights_only=False)
+            except TypeError:
+                state_dict = torch.load(RESNET18_LOCAL_PATH, map_location='cpu')
         else:
             print(f"📥 ResNet18 모델 다운로드 중... (최초 1회만)")
             state_dict = modelzoo.load_url(resnet18_url)
