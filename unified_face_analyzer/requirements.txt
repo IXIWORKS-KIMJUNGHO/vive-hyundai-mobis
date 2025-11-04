@@ -14,12 +14,12 @@ numpy>=1.24.0,<2.0.0             # 배열 연산
 Pillow>=10.0.0,<11.0.0           # 이미지 I/O
 
 # Face Detection & Analysis
-mediapipe>=0.10.0,<0.11.0        # MediaPipe 468-point landmarks (dlib 대체)
+mediapipe>=0.10.14,<0.11.0       # MediaPipe 468-point landmarks (dlib 대체, protobuf 4.x 호환)
 
 # CLIP Model (Gender, Glasses, Beard Classification)
 transformers>=4.30.0,<4.45.0     # HuggingFace Transformers (CLIP 로딩)
 sentencepiece>=0.1.99            # Tokenizer dependency
-protobuf>=3.20.0,<4.0.0          # Protocol buffers (transformers 의존성)
+protobuf>=4.25.3,<5.0.0          # Protocol buffers (mediapipe 0.10.14+, transformers 호환)
 
 # Configuration & Utilities
 pyyaml>=6.0,<7.0                 # YAML 설정 파일 파싱
