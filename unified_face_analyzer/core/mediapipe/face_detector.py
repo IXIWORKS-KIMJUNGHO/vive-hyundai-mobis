@@ -1,6 +1,7 @@
 """MediaPipe FaceMesh 기반 얼굴 검출기 (Unified Face Analyzer용)"""
 
 import time
+import cv2
 import numpy as np
 import mediapipe as mp
 from typing import List, Dict, Any, Optional
@@ -38,15 +39,36 @@ class FaceDetector:
         이미지에서 얼굴 검출 수행
 
         Args:
-            image: BGR 형식 이미지 (H, W, 3)
+            image: BGR 형식 이미지 (H, W, 3) 또는 Grayscale (H, W)
 
         Returns:
             DetectionResult with 468 landmarks
         """
         start_time = time.time()
 
-        # BGR → RGB 변환 (MediaPipe 요구사항)
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if len(image.shape) == 3 else image
+        # 이미지 형식 확인 및 RGB 변환 (MediaPipe 요구사항)
+        if len(image.shape) == 2:
+            # Grayscale (IR 카메라) → 전처리 + RGB 변환
+            # CLAHE 적용으로 contrast 향상 (IR 이미지 품질 개선)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(image)
+            image_rgb = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
+            logger.debug(f"IR image enhanced & converted: {image.shape} → {image_rgb.shape}")
+        elif len(image.shape) == 3 and image.shape[2] == 3:
+            # BGR → Grayscale → CLAHE → RGB (통일된 전처리)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(gray)
+            image_rgb = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
+            logger.debug(f"BGR enhanced via grayscale: {image.shape} → {image_rgb.shape}")
+        else:
+            logger.error(f"Unsupported image format: {image.shape}")
+            return DetectionResult(
+                success=False,
+                landmarks=[],
+                confidence=0.0,
+                processing_time=0.0
+            )
 
         # MediaPipe 검출
         results = self.face_mesh.process(image_rgb)
@@ -54,7 +76,12 @@ class FaceDetector:
         processing_time = (time.time() - start_time) * 1000  # ms
 
         if not results.multi_face_landmarks:
-            logger.debug("No face detected")
+            logger.warning(
+                f"No face detected - Image shape: {image.shape}, "
+                f"RGB shape: {image_rgb.shape}, "
+                f"dtype: {image_rgb.dtype}, "
+                f"min: {image_rgb.min()}, max: {image_rgb.max()}"
+            )
             return DetectionResult(
                 success=False,
                 landmarks=[],
@@ -139,7 +166,3 @@ class FaceDetector:
         if hasattr(self, 'face_mesh'):
             self.face_mesh.close()
             logger.debug("MediaPipe FaceMesh closed")
-
-
-# cv2 import 추가
-import cv2
