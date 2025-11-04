@@ -15,7 +15,6 @@ Pillow>=10.0.0,<13.0.0           # 이미지 I/O - 현재: 12.0.0
 
 # Face Detection & Analysis
 mediapipe>=0.10.14,<0.11.0       # MediaPipe 468-point landmarks (dlib 대체, protobuf 4.x 호환) - 현재: 0.10.14
-dlib>=19.24.0                    # Face recognition library (선택사항, 레거시 지원) - 현재: 20.0.0
 
 # CLIP Model (Gender, Glasses, Beard Classification)
 transformers>=4.30.0,<5.0.0      # HuggingFace Transformers (CLIP 로딩) - 현재: 4.57.1
